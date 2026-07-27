@@ -104,7 +104,10 @@
   <section id="screen-admin" class="p-6 md:p-10 hidden bg-gray-50">
     <div class="flex justify-between items-center mb-6 border-b pb-4">
       <h2 class="text-2xl md:text-3xl font-black text-viscoblue">Painel</h2>
-      <button onclick="doLogout()" class="bg-gray-300 px-4 py-2 rounded text-sm font-bold hover:bg-gray-400">Sair</button>
+      <div class="flex gap-2">
+        <button onclick="abrirGerenciadorBD()" class="bg-gray-700 px-4 py-2 rounded text-sm font-bold text-white hover:bg-gray-800">🗄️ Banco de Dados</button>
+        <button onclick="doLogout()" class="bg-gray-300 px-4 py-2 rounded text-sm font-bold hover:bg-gray-400">Sair</button>
+      </div>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
       <button onclick="drawWinner()" class="bg-green-700 hover:bg-green-800 text-white font-bold p-4 rounded-lg uppercase shadow">Sortear vencedor</button>
@@ -146,6 +149,33 @@
       <button onclick="clearAll()" class="text-sm font-bold text-red-600 hover:text-red-800 underline">Apagar todos os dados</button>
     </div>
   </section>
+
+  <!-- ===== CRUD genérico das tabelas do banco ===== -->
+  <section id="screen-db-crud" class="p-6 md:p-10 hidden bg-gray-50">
+    <div class="flex justify-between items-center mb-6 border-b pb-4">
+      <h2 class="text-2xl md:text-3xl font-black text-viscoblue">Banco de Dados</h2>
+      <button onclick="showScreen('screen-admin')" class="bg-gray-300 px-4 py-2 rounded text-sm font-bold hover:bg-gray-400">← Voltar ao painel</button>
+    </div>
+    <div id="crud-tabs" class="flex flex-wrap gap-2 mb-4"></div>
+    <div class="flex justify-between items-center mb-3">
+      <p id="crud-titulo" class="font-bold text-gray-700"></p>
+      <button id="crud-btn-novo" onclick="abrirFormularioCrud(null)" class="bg-viscoblue text-white px-4 py-2 rounded text-sm font-bold uppercase hover:bg-blue-900">+ Adicionar</button>
+    </div>
+    <div id="crud-tabela" class="bg-white rounded-lg border overflow-x-auto"></div>
+  </section>
+</div>
+
+<!-- MODAL DE FORMULÁRIO CRUD -->
+<div id="modal-crud" class="hidden fixed inset-0 bg-black/70 z-50 flex items-start justify-center p-4 overflow-y-auto">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 mt-6 md:mt-10">
+    <h3 id="crud-form-titulo" class="text-lg font-black text-viscoblue mb-4">Registro</h3>
+    <div id="crud-form-campos" class="space-y-3"></div>
+    <p id="crud-form-erro" class="text-xs text-red-600 font-bold mt-3 hidden"></p>
+    <div class="flex gap-2 mt-5">
+      <button onclick="fecharFormularioCrud()" class="flex-1 bg-gray-200 hover:bg-gray-300 p-3 rounded-lg font-bold uppercase text-sm">Cancelar</button>
+      <button onclick="salvarFormularioCrud()" class="flex-1 bg-viscoblue text-white hover:bg-blue-900 p-3 rounded-lg font-bold uppercase text-sm">Salvar</button>
+    </div>
+  </div>
 </div>
 
 <!-- MODAL FORA DO WRAPPER — fixed funciona corretamente sem overflow-hidden cortando -->
@@ -383,7 +413,7 @@ const TOTAL_PONTUAVEL = QUIZ.filter(q => q.pontua).length;
    3. ESTADO E NAVEGAÇÃO
    ===================================================================== */
 let S = { fase:null, idx:0, acertos:0, participante:{}, respQuiz:[], respPesquisa:[] };
-const SCREENS = ["screen-register","screen-quiz","screen-bridge","screen-result","screen-login","screen-admin"];
+const SCREENS = ["screen-register","screen-quiz","screen-bridge","screen-result","screen-login","screen-admin","screen-db-crud"];
 
 function showScreen(id){
   SCREENS.forEach(s => document.getElementById(s).classList.toggle("hidden", s !== id));
@@ -1726,6 +1756,270 @@ async function clearAll(){
   await api("/participantes", { method:"DELETE", auth:true });
   await api("/pesquisa-gro", { method:"DELETE", auth:true });
   loadDashboard();
+}
+
+/* =====================================================================
+   6. CRUD GENÉRICO DAS TABELAS (Banco de Dados)
+   config_envio fica de fora de propósito: é registro único (id=1) e já
+   tem edição dedicada na seção "Contatos para envio" acima.
+   ===================================================================== */
+const CRUD_TABELAS = {
+  participantes: {
+    label: "Participantes",
+    api: "/participantes",
+    idKey: "id",
+    colunasTabela: ["nome","cpf","setor","acertos","respondeu_pesquisa","criado_em"],
+    campos: [
+      { key:"nome", label:"Nome", tipo:"text", obrigatorio:true },
+      { key:"cpf", label:"CPF", tipo:"text", obrigatorio:true },
+      { key:"setor", label:"Setor", tipo:"select", opcoes:SETORES, obrigatorio:true },
+      { key:"acertos", label:"Acertos", tipo:"number", obrigatorio:true },
+      { key:"total", label:"Total", tipo:"number", obrigatorio:true },
+      { key:"respondeu_pesquisa", label:"Respondeu GRO", tipo:"checkbox" },
+      { key:"respostas", label:"Respostas (JSON)", tipo:"json" },
+    ]
+  },
+  pesquisa_gro: {
+    label: "Pesquisa GRO",
+    api: "/pesquisa-gro",
+    idKey: "id",
+    colunasTabela: ["setor","nota_clima","criado_em"],
+    campos: [
+      { key:"setor", label:"Setor", tipo:"select", opcoes:SETORES, obrigatorio:true },
+      { key:"nota_clima", label:"Nota Clima (0-10)", tipo:"number" },
+      { key:"respostas", label:"Respostas (JSON)", tipo:"json" },
+    ]
+  },
+  metas_setor: {
+    label: "Metas por Setor",
+    api: "/metas-setor",
+    idKey: "setor",
+    upsertBase: true, // criar/editar sempre via PUT na URL base (setor vem no corpo)
+    idSomenteCriacao: true,
+    colunasTabela: ["setor","meta","atualizado_em"],
+    campos: [
+      { key:"setor", label:"Setor", tipo:"select", opcoes:SETORES, obrigatorio:true },
+      { key:"meta", label:"Meta", tipo:"number", obrigatorio:true },
+    ]
+  },
+  admin_users: {
+    label: "Administradores",
+    api: "/admin-users",
+    idKey: "id",
+    colunasTabela: ["email","criado_em"],
+    campos: [
+      { key:"email", label:"E-mail", tipo:"text", obrigatorio:true },
+      { key:"password", label:"Senha (deixe em branco p/ não alterar)", tipo:"password" },
+    ]
+  }
+};
+
+let CRUD_ATUAL = null;
+let CRUD_DADOS = [];
+let CRUD_EDITANDO = null; // índice em CRUD_DADOS, ou null = criando novo
+
+function abrirGerenciadorBD(){
+  showScreen("screen-db-crud");
+  selecionarTabelaCrud(Object.keys(CRUD_TABELAS)[0]);
+}
+
+function renderAbasCrud(){
+  document.getElementById("crud-tabs").innerHTML = Object.entries(CRUD_TABELAS).map(([key, t]) => `
+    <button onclick="selecionarTabelaCrud('${key}')"
+      class="px-4 py-2 rounded-full text-sm font-bold border ${key===CRUD_ATUAL ? 'bg-viscoblue text-white border-viscoblue' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'}">
+      ${esc(t.label)}
+    </button>`).join("");
+}
+
+async function selecionarTabelaCrud(key){
+  CRUD_ATUAL = key;
+  renderAbasCrud();
+  document.getElementById("crud-titulo").innerText = CRUD_TABELAS[key].label;
+  await carregarTabelaCrud();
+}
+
+async function carregarTabelaCrud(){
+  const cont = document.getElementById("crud-tabela");
+  cont.innerHTML = '<p class="text-gray-500 text-center py-6">Carregando…</p>';
+  const def = CRUD_TABELAS[CRUD_ATUAL];
+
+  if(MODO_TESTE){
+    cont.innerHTML = '<p class="text-gray-500 text-center py-6">Modo demonstração: configure a API pra usar o CRUD de verdade.</p>';
+    return;
+  }
+
+  try {
+    CRUD_DADOS = await api(def.api, { auth:true }) || [];
+  } catch(e){
+    cont.innerHTML = `<p class="text-red-600 text-center py-6">Erro ao carregar: ${esc(e.message)}</p>`;
+    return;
+  }
+
+  if(!CRUD_DADOS.length){
+    cont.innerHTML = '<p class="text-gray-500 text-center py-6">Nenhum registro.</p>';
+    return;
+  }
+
+  const colunas = def.colunasTabela;
+  cont.innerHTML = `
+    <table class="w-full text-sm">
+      <thead class="bg-gray-100 text-left">
+        <tr>
+          ${colunas.map(c => `<th class="p-3 font-bold text-gray-600 uppercase text-xs">${esc(rotuloColunaCrud(def,c))}</th>`).join("")}
+          <th class="p-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${CRUD_DADOS.map((row,i) => `
+          <tr class="border-t hover:bg-gray-50">
+            ${colunas.map(c => `<td class="p-3">${esc(formatarValorCrud(row[c]))}</td>`).join("")}
+            <td class="p-3 text-right whitespace-nowrap">
+              <button onclick="abrirFormularioCrud(${i})" class="text-viscoblue font-bold text-xs hover:underline mr-3">Editar</button>
+              <button onclick="apagarLinhaCrud(${i})" class="text-red-600 font-bold text-xs hover:underline">Apagar</button>
+            </td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function rotuloColunaCrud(def, chave){
+  const campo = def.campos.find(c => c.key === chave);
+  return campo ? campo.label : chave;
+}
+
+function formatarValorCrud(v){
+  if(v == null) return "—";
+  if(typeof v === "boolean") return v ? "Sim" : "Não";
+  if(typeof v === "object"){
+    const s = JSON.stringify(v);
+    return s.length > 60 ? s.slice(0,60) + "…" : s;
+  }
+  if(typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) return new Date(v).toLocaleString("pt-BR");
+  return String(v);
+}
+
+function abrirFormularioCrud(indice){
+  CRUD_EDITANDO = indice;
+  const def = CRUD_TABELAS[CRUD_ATUAL];
+  const row = indice != null ? CRUD_DADOS[indice] : {};
+  document.getElementById("crud-form-titulo").innerText = (indice != null ? "Editar — " : "Novo — ") + def.label;
+  document.getElementById("crud-form-erro").classList.add("hidden");
+
+  const travarPk = indice != null && def.idSomenteCriacao;
+
+  document.getElementById("crud-form-campos").innerHTML = def.campos.map(campo => {
+    const valorAtual = row[campo.key];
+    const idInput = "crud-campo-" + campo.key;
+    const desabilitado = travarPk && campo.key === def.idKey;
+
+    if(campo.tipo === "select"){
+      return `<div>
+        <label class="text-xs font-bold text-gray-600 uppercase block mb-1">${esc(campo.label)}</label>
+        <select id="${idInput}" ${desabilitado?"disabled":""} class="border rounded p-2 text-sm w-full">
+          <option value="">Selecione…</option>
+          ${campo.opcoes.map(o => `<option value="${esc(o)}" ${o===valorAtual?"selected":""}>${esc(o)}</option>`).join("")}
+        </select>
+      </div>`;
+    }
+    if(campo.tipo === "checkbox"){
+      return `<div class="flex items-center gap-2">
+        <input id="${idInput}" type="checkbox" ${valorAtual?"checked":""} class="w-4 h-4">
+        <label class="text-sm font-bold text-gray-700">${esc(campo.label)}</label>
+      </div>`;
+    }
+    if(campo.tipo === "json"){
+      return `<div>
+        <label class="text-xs font-bold text-gray-600 uppercase block mb-1">${esc(campo.label)}</label>
+        <textarea id="${idInput}" rows="5" class="border rounded p-2 text-xs w-full font-mono">${esc(valorAtual!=null?JSON.stringify(valorAtual,null,2):"[]")}</textarea>
+      </div>`;
+    }
+    if(campo.tipo === "password"){
+      return `<div>
+        <label class="text-xs font-bold text-gray-600 uppercase block mb-1">${esc(campo.label)}</label>
+        <input id="${idInput}" type="password" class="border rounded p-2 text-sm w-full" autocomplete="new-password">
+      </div>`;
+    }
+    return `<div>
+      <label class="text-xs font-bold text-gray-600 uppercase block mb-1">${esc(campo.label)}</label>
+      <input id="${idInput}" type="${campo.tipo==="number"?"number":"text"}" value="${valorAtual!=null?esc(valorAtual):""}" ${desabilitado?"disabled":""} class="border rounded p-2 text-sm w-full">
+    </div>`;
+  }).join("");
+
+  document.getElementById("modal-crud").classList.remove("hidden");
+}
+
+function fecharFormularioCrud(){
+  document.getElementById("modal-crud").classList.add("hidden");
+}
+
+async function salvarFormularioCrud(){
+  const def = CRUD_TABELAS[CRUD_ATUAL];
+  const erroEl = document.getElementById("crud-form-erro");
+  erroEl.classList.add("hidden");
+
+  const corpo = {};
+  for(const campo of def.campos){
+    const el = document.getElementById("crud-campo-" + campo.key);
+    if(!el || el.disabled) continue;
+    if(campo.tipo === "checkbox"){ corpo[campo.key] = el.checked; continue; }
+    if(campo.tipo === "number"){ corpo[campo.key] = el.value === "" ? null : Number(el.value); continue; }
+    if(campo.tipo === "json"){
+      try { corpo[campo.key] = el.value.trim() ? JSON.parse(el.value) : []; }
+      catch(e){ erroEl.innerText = 'JSON inválido em "' + campo.label + '": ' + e.message; erroEl.classList.remove("hidden"); return; }
+      continue;
+    }
+    if(campo.tipo === "password"){
+      if(el.value) corpo[campo.key] = el.value; // vazio = não altera a senha
+      continue;
+    }
+    corpo[campo.key] = el.value;
+  }
+
+  // Ao editar com PK travada (metas_setor), o valor não veio do form — usa o da linha original.
+  if(CRUD_EDITANDO != null && def.idSomenteCriacao){
+    corpo[def.idKey] = CRUD_DADOS[CRUD_EDITANDO][def.idKey];
+  }
+
+  for(const campo of def.campos){
+    const vazio = corpo[campo.key] == null || corpo[campo.key] === "";
+    if(campo.obrigatorio && vazio && campo.tipo !== "password"){
+      erroEl.innerText = "Campo obrigatório: " + campo.label;
+      erroEl.classList.remove("hidden");
+      return;
+    }
+  }
+
+  const editando = CRUD_EDITANDO != null;
+  const rowAtual = editando ? CRUD_DADOS[CRUD_EDITANDO] : null;
+
+  try {
+    if(def.upsertBase){
+      await api(def.api, { method:"PUT", auth:true, body:corpo });
+    } else if(editando){
+      await api(def.api + "/" + encodeURIComponent(rowAtual[def.idKey]), { method:"PUT", auth:true, body:corpo });
+    } else {
+      await api(def.api, { method:"POST", auth:true, body:corpo });
+    }
+  } catch(e){
+    erroEl.innerText = "Erro ao salvar: " + e.message;
+    erroEl.classList.remove("hidden");
+    return;
+  }
+
+  fecharFormularioCrud();
+  await carregarTabelaCrud();
+}
+
+async function apagarLinhaCrud(indice){
+  const def = CRUD_TABELAS[CRUD_ATUAL];
+  const row = CRUD_DADOS[indice];
+  if(!confirm("Apagar este registro? Não há como desfazer.")) return;
+  try {
+    await api(def.api + "/" + encodeURIComponent(row[def.idKey]), { method:"DELETE", auth:true });
+    await carregarTabelaCrud();
+  } catch(e){
+    alert("Erro ao apagar: " + e.message);
+  }
 }
 </script>
 </body>
