@@ -32,4 +32,23 @@ router.delete("/", requireAdmin, asyncHandler(async (_req, res) => {
   res.status(204).end();
 }));
 
+// Admin — edita uma resposta do GRO (CRUD do painel).
+router.put("/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const { setor, respostas, nota_clima } = req.body || {};
+  const { rows } = await pool.query(
+    `update pesquisa_gro set setor = $2, respostas = $3, nota_clima = $4
+      where id = $1
+      returning *`,
+    [req.params.id, setor, JSON.stringify(respostas), nota_clima ?? null]
+  );
+  if (!rows[0]) return res.status(404).json({ error: "Registro não encontrado." });
+  res.json(rows[0]);
+}));
+
+// Admin — apaga uma resposta específica do GRO (CRUD do painel).
+router.delete("/:id", requireAdmin, asyncHandler(async (req, res) => {
+  await pool.query("delete from pesquisa_gro where id = $1", [req.params.id]);
+  res.status(204).end();
+}));
+
 module.exports = router;
