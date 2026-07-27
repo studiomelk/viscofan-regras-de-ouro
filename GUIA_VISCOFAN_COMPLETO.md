@@ -1,13 +1,14 @@
 # VISCOFAN — QUIZ REGRAS DE OURO
 ## Guia de publicação — versão final (banco de dados real)
 
-> ⚠️ **DESATUALIZADO (2026-07-27):** o backend migrou de Supabase para um
-> Postgres próprio hospedado numa VPS, acessado por uma API Node.js.
-> As seções abaixo sobre criar projeto no Supabase, RLS e chaves anon **não
-> se aplicam mais**. Siga em vez disso `backend/README.md` para configurar
-> o banco/API, e troque `SUPABASE_URL`/`SUPABASE_ANON` por `API_URL` no
-> `index.html`. O restante do guia (Netlify, teste do fluxo, LGPD) continua
-> válido.
+> ⚠️ **DESATUALIZADO (2026-07-27):** o sistema migrou de Supabase para um
+> Postgres próprio, e o site deixou de ser um HTML estático solto no
+> Netlify — agora é um único app (`backend/`, API + site juntos) publicado
+> via Easypanel (Docker) numa VPS. As seções abaixo sobre Supabase, RLS,
+> chaves anon e publicação no Netlify **não se aplicam mais**. Siga em vez
+> disso `backend/README.md`. Não existe mais `index.html` solto na raiz do
+> projeto — o site é `backend/public/index.html`. O restante do guia
+> (teste do fluxo, LGPD) continua válido.
 
 **O que é:** quiz de segurança (identificado, com nota e sorteio) + GRO
 (anônimo) + painel administrativo completo (metas, envio de relatório por
@@ -235,21 +236,40 @@ Banco (Supabase):
 Se precisar pedir ajustes a este sistema em outra conversa, cole isto
 como contexto:
 
-> Tenho um sistema de quiz da Viscofan: index.html + logo-viscofan.png
-> (site estático, publicado no Netlify) + backend/ (API Node.js/Express
-> própria, em container Docker numa VPS) + Postgres puro (container Docker
-> na mesma VPS, hostname interno "postgres"). Não uso mais Supabase.
+> Tenho um sistema de quiz da Viscofan: um único app (pasta backend/) que
+> serve a API e o site juntos, publicado via Easypanel (Docker) numa VPS.
+> Repositório: github.com/studiomelk/viscofan-regras-de-ouro. Postgres
+> próprio (não é mais Supabase), num host separado (db.servrobmar.site),
+> banco compartilhado com outros sistemas meus (só as tabelas abaixo são
+> do Viscofan).
 >
 > ARQUITETURA:
+> - NÃO existe index.html na raiz do repo. O site é
+>   backend/public/index.html (+ backend/public/logo-viscofan.png),
+>   servido como estático pelo próprio Express (express.static) — mesma
+>   origem da API, sem CORS entre frontend e backend
 > - Frontend: HTML único com Tailwind CDN, jsPDF + AutoTable (via CDN
->   unpkg.com), fetch() contra a API própria via a função `api()` definida
->   no início do <script> (const API_URL aponta pra API na VPS)
+>   unpkg.com), fetch() contra a API via a função `api()` definida no
+>   início do <script> (const API_URL = "/api", caminho relativo)
 > - Logo carregada de arquivo externo (logo-viscofan.png), NUNCA como
 >   base64 embutido no HTML — string gigante numa linha só corre risco
 >   de ser corrompida por proxy de rede corporativa
 > - Backend: Express em backend/src/server.js, rotas em
 >   backend/src/routes/*.js, conexão Postgres via `pg` em backend/src/db.js
->   lendo credenciais do .env (nunca hardcoded, nunca no navegador)
+>   lendo credenciais de variáveis de ambiente (nunca hardcoded, nunca no
+>   navegador). IMPORTANTE: db.js monta a conexão sempre a partir de
+>   PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE discretos, nunca via
+>   DATABASE_URL com sslmode embutido — a lib pg ignora o ssl:
+>   {rejectUnauthorized:false} explícito quando sslmode=require vem na
+>   connection string, e derruba conexão com certificado autoassinado
+>   (bug real já enfrentado)
+> - Rotas assíncronas SEMPRE envolvidas em backend/src/asyncHandler.js —
+>   Express 4 não captura rejeição de handler async sozinho, e sem isso
+>   uma falha de banco derruba o processo inteiro (bug real já enfrentado)
+> - Inserts em colunas jsonb (respostas do quiz/GRO) SEMPRE com
+>   JSON.stringify() explícito no valor do parâmetro — a lib pg serializa
+>   array JS cru como array literal do Postgres, não como JSON, e corrompe
+>   a coluna (bug real já enfrentado)
 > - Auth do admin: tabela admin_users (bcrypt) + JWT (backend/src/auth.js),
 >   token guardado no localStorage do navegador como "viscofan_admin_token"
 > - 5 tabelas no Postgres: participantes (quiz identificado),
@@ -258,7 +278,8 @@ como contexto:
 > - Autorização: rotas POST de inserção (participantes, pesquisa-gro,
 >   marcar-pesquisa) são públicas; todo o resto exige JWT de admin
 >   (middleware requireAdmin)
-> - PDFs do relatório: upload vai para backend/uploads/ (volume Docker),
+> - PDFs do relatório: upload vai para backend/uploads/ (sem volume
+>   persistente configurado ainda — some a cada rebuild do Easypanel),
 >   servido estaticamente em /uploads/<arquivo>, pra virar link no
 >   mailto:/wa.me (sem anexo real — não há serviço de e-mail transacional)
 > - Quiz: 13 perguntas, perguntas 1 e 4 têm todas as alternativas
