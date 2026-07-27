@@ -28,6 +28,10 @@ app.use("/api/config-envio", configEnvioRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/uploads", express.static(UPLOAD_DIR));
 
+// Site (index.html + logo) servido pelo mesmo processo — um único app,
+// mesma origem, sem CORS entre frontend e API.
+app.use(express.static(path.join(__dirname, "..", "public")));
+
 app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({ error: "Erro interno do servidor." });
