@@ -1,0 +1,24 @@
+# Adicione este serviço ao docker-compose.yml que já roda o Postgres
+# (mesmo arquivo, mesma "network" do serviço chamado "postgres").
+#
+# Exemplo mínimo — ajuste nomes/rede para bater com o seu compose atual:
+#
+# services:
+#   postgres:
+#     image: postgres:16
+#     ...
+#
+#   viscofan-backend:
+#     build: ./backend
+#     restart: unless-stopped
+#     env_file:
+#       - ./.env
+#     ports:
+#       - "3001:3001"
+#     volumes:
+#       - viscofan_uploads:/app/uploads
+#     depends_on:
+#       - postgres
+#
+# volumes:
+#   viscofan_uploads:
