@@ -51,4 +51,25 @@ router.delete("/", requireAdmin, asyncHandler(async (_req, res) => {
   res.status(204).end();
 }));
 
+// Admin — edita um participante (CRUD do painel).
+router.put("/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const { nome, cpf, setor, acertos, total, respostas, respondeu_pesquisa } = req.body || {};
+  const { rows } = await pool.query(
+    `update participantes
+        set nome = $2, cpf = $3, setor = $4, acertos = $5, total = $6,
+            respostas = $7, respondeu_pesquisa = $8
+      where id = $1
+      returning *`,
+    [req.params.id, nome, cpf, setor, acertos, total, JSON.stringify(respostas), !!respondeu_pesquisa]
+  );
+  if (!rows[0]) return res.status(404).json({ error: "Participante não encontrado." });
+  res.json(rows[0]);
+}));
+
+// Admin — apaga um participante específico (CRUD do painel).
+router.delete("/:id", requireAdmin, asyncHandler(async (req, res) => {
+  await pool.query("delete from participantes where id = $1", [req.params.id]);
+  res.status(204).end();
+}));
+
 module.exports = router;
