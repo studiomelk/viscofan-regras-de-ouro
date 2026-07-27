@@ -1,85 +1,78 @@
-# Backend Viscofan — deploy na VPS
+# Backend Viscofan — app único (API + site)
 
-Substitui o Supabase: guarda as credenciais do Postgres em `.env` (nunca no
-navegador) e expõe uma API HTTP que o `index.html` consome.
+Substitui o Supabase: guarda as credenciais do Postgres em variáveis de
+ambiente (nunca no navegador) e expõe uma API HTTP. O próprio processo
+Node também serve o site (`public/index.html` + `public/logo-viscofan.png`)
+— um único app, mesma origem, sem CORS entre frontend e API.
 
-## 1. Levar os arquivos para a VPS
+Hospedado hoje via **Easypanel** (Docker), repositório
+`studiomelk/viscofan-regras-de-ouro`, branch `main`, **Caminho de Build =
+`/backend`**.
 
-Copie a pasta `backend/` e o arquivo `.env` (da raiz do projeto) para a VPS,
-na mesma pasta onde já está o `docker-compose.yml` que sobe o serviço
-`postgres`.
+## Estrutura
 
-## 2. Adicionar o serviço ao docker-compose.yml
-
-Use `backend/docker-compose.snippet.yml` como referência e adicione um
-serviço `viscofan-backend` ao seu compose existente, na mesma rede do
-serviço `postgres`. Ele precisa de:
-- `build: ./backend`
-- `env_file: ./.env`
-- porta `3001` publicada (ou apenas interna, se for usar proxy reverso)
-- um volume para `/app/uploads` (senão os PDFs enviados somem a cada
-  rebuild do container)
-
-## 3. Subir o container
-
-```bash
-docker compose up -d --build viscofan-backend
+```
+backend/
+  public/index.html       <- o site (API_URL = "/api", caminho relativo)
+  public/logo-viscofan.png
+  src/server.js           <- serve a API em /api/* e o site em /
+  src/routes/*.js
+  Dockerfile
 ```
 
-## 4. Criar as tabelas (uma vez só)
+Não existe mais `index.html` na raiz do repositório — `backend/public/` é a
+única cópia. Editar o site é editar esse arquivo.
 
-```bash
-docker compose exec viscofan-backend npm run migrate
+## 1. Variáveis de ambiente (Easypanel → app → Environment)
+
+```
+PGHOST=...
+PGPORT=5432
+PGDATABASE=...
+PGUSER=...
+PGPASSWORD=...
+PGSSLMODE=require   # ou "disable" se o Postgres não tiver TLS
+PORT=3001
+JWT_SECRET=...       # string aleatória longa, ex: openssl rand -hex 32
+CORS_ORIGIN=*        # opcional agora que é a mesma origem; pode remover
 ```
 
-## 5. Criar o usuário administrador (uma vez só)
+## 2. Criar as tabelas (uma vez só)
+
+Pelo terminal do app no Easypanel (ícone `>_`), ou via SSH na VPS:
 
 ```bash
-docker compose exec viscofan-backend npm run create-admin -- admin@viscofan.com "SUA_SENHA_FORTE"
+npm run migrate
+```
+
+## 3. Criar o usuário administrador (uma vez só)
+
+```bash
+npm run create-admin -- seu-email@exemplo.com "SUA_SENHA_FORTE"
 ```
 
 Guarde esse e-mail/senha — é o login do painel administrativo do site.
 
-## 6. Testar a API
+## 4. Domínio no Easypanel
+
+Na aba **Domínios** do app, configure a **Porta de destino = 3001** (é a
+porta que `src/server.js` escuta). HTTPS já vem pronto no domínio
+`*.easypanel.host`; se usar domínio próprio, ative o toggle HTTPS na mesma
+tela.
+
+## 5. Testar
 
 ```bash
-curl http://SEU_IP_OU_DOMINIO:3001/api/health
-# deve responder {"ok":true}
+curl https://SEU-DOMINIO/api/health
+# {"ok":true}
 ```
 
-## 7. Apontar o site para a API
+Abra `https://SEU-DOMINIO/` no navegador — deve carregar o site direto.
 
-Em `index.html`, na linha perto do topo do `<script>`:
+## 6. Uploads de PDF
 
-```javascript
-const API_URL = "https://SEU-DOMINIO-OU-IP:3001/api";
-```
-
-Troque pela URL real do passo anterior. Enquanto tiver "SEU-DOMINIO" o site
-roda em MODO TESTE (não grava nada).
-
-## 8. IMPORTANTE — HTTPS antes de divulgar
-
-O login do admin envia a senha para essa API. **Não exponha a porta 3001
-direto em HTTP para a internet** — qualquer um na mesma rede consegue ler a
-senha em texto puro. Antes de divulgar o link para a fábrica:
-
-- Coloque um proxy reverso na frente (Caddy ou Nginx) com certificado TLS
-  (Let's Encrypt), servindo a API em `https://api.seudominio.com/api` em vez
-  da porta 3001 crua; ou
-- Se a VPS já tem Nginx/Caddy configurado para outros serviços, adicione um
-  `location`/site apontando para `http://viscofan-backend:3001` internamente.
-
-Depois de configurar o HTTPS, atualize `API_URL` no `index.html` para a URL
-`https://...` correspondente.
-
-## 9. CORS
-
-No `.env`, ajuste `CORS_ORIGIN` para a URL exata do site publicado no
-Netlify (ex: `https://viscofan-quiz.netlify.app`). Sem isso o navegador
-bloqueia as chamadas do site para a API.
-
-## 10. Publicar o site
-
-Igual antes: `index.html` + `logo-viscofan.png` juntos no Netlify
-(app.netlify.com/drop).
+A pasta `uploads/` guarda os PDFs de relatório enviados por e-mail/WhatsApp.
+Sem um volume persistente configurado no Easypanel, ela é apagada a cada
+rebuild — os links antigos de relatório param de funcionar, mas isso não
+afeta os dados do banco. Se quiser preservar os PDFs entre deploys,
+configure um Volume no Easypanel apontando para `/app/uploads`.
