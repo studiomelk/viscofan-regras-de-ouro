@@ -26,4 +26,10 @@ router.put("/", requireAdmin, asyncHandler(async (req, res) => {
   res.json(rows[0]);
 }));
 
+// Admin — apaga a meta de um setor (CRUD do painel).
+router.delete("/:setor", requireAdmin, asyncHandler(async (req, res) => {
+  await pool.query("delete from metas_setor where setor = $1", [req.params.setor]);
+  res.status(204).end();
+}));
+
 module.exports = router;
