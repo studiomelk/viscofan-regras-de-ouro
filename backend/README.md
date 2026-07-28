@@ -87,6 +87,15 @@ empresa. Login do admin é único e enxerga todas as empresas através do
 seletor no topo do painel — dashboard, CRUD e "Apagar todos os dados"
 sempre operam só na empresa selecionada ali.
 
+**Empresa ativa (quem responde o formulário não escolhe empresa).**
+`empresas.ativa` marca qual empresa recebe as respostas do público agora
+— só uma por vez (rota `POST /empresas/:id/ativar`, transação zera as
+outras). É uma ação **separada** de "selecionar pra navegar" no topo do
+painel: dá pra olhar relatórios de uma empresa sem mudar quem está
+recebendo respostas novas. Pra trocar: selecione a empresa no topo →
+botão "Definir selecionada como ativa". O formulário público lê
+`GET /empresas/ativa` direto, sem seletor.
+
 Pra cadastrar uma empresa nova: painel → 🗄️ Banco de Dados → aba
 **Empresas** → + Adicionar. Depois troque pra ela no seletor do topo e
 cadastre os setores dela na aba **Setores**, antes de divulgar o link —
