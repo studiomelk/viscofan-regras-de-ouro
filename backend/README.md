@@ -76,3 +76,18 @@ Sem um volume persistente configurado no Easypanel, ela é apagada a cada
 rebuild — os links antigos de relatório param de funcionar, mas isso não
 afeta os dados do banco. Se quiser preservar os PDFs entre deploys,
 configure um Volume no Easypanel apontando para `/app/uploads`.
+
+## 7. Multi-empresa (2026-07-27)
+
+O mesmo formulário atende várias empresas. `empresas` e `setores` são
+tabelas próprias (cada empresa tem sua lista de setores, gerenciável pelo
+botão "🗄️ Banco de Dados" no painel). `participantes`, `pesquisa_gro`,
+`metas_setor` e `config_envio` têm `empresa_id` e só existem dentro de uma
+empresa. Login do admin é único e enxerga todas as empresas através do
+seletor no topo do painel — dashboard, CRUD e "Apagar todos os dados"
+sempre operam só na empresa selecionada ali.
+
+Pra cadastrar uma empresa nova: painel → 🗄️ Banco de Dados → aba
+**Empresas** → + Adicionar. Depois troque pra ela no seletor do topo e
+cadastre os setores dela na aba **Setores**, antes de divulgar o link —
+sem setor cadastrado, ninguém consegue se registrar.
