@@ -504,7 +504,7 @@ async function carregarEmpresaAtivaCadastro(){
     }
 
     PARTICIPANTE_EMPRESA_ID = ativa.id;
-    info.innerText = "Você está respondendo por: " + ativa.nome;
+    info.innerText = "";
 
     const setores = await api("/setores?empresa_id=" + encodeURIComponent(ativa.id));
     if(!setores.length){
