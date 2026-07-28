@@ -39,8 +39,12 @@
       <input type="text" id="reg-cpf" placeholder="CPF (000.000.000-00)" maxlength="14" oninput="formatCpf(this)" class="w-full p-3 border rounded outline-none">
     </div>
 
-    <select id="reg-sector" class="w-full p-3 border rounded text-gray-700 bg-white cursor-pointer outline-none">
-      <option value="" disabled selected>Selecione seu setor</option>
+    <select id="reg-empresa" onchange="onTrocaEmpresaCadastro()" class="w-full p-3 border rounded text-gray-700 bg-white cursor-pointer outline-none">
+      <option value="" disabled selected>Selecione sua empresa</option>
+    </select>
+
+    <select id="reg-sector" disabled class="w-full p-3 border rounded text-gray-700 bg-white cursor-pointer outline-none disabled:bg-gray-100 disabled:cursor-not-allowed">
+      <option value="" disabled selected>Selecione sua empresa primeiro</option>
     </select>
 
     <label class="flex gap-3 items-start bg-gray-50 border border-gray-200 rounded p-4 text-sm text-gray-700 cursor-pointer">
@@ -109,6 +113,14 @@
         <button onclick="doLogout()" class="bg-gray-300 px-4 py-2 rounded text-sm font-bold hover:bg-gray-400">Sair</button>
       </div>
     </div>
+
+    <div class="bg-white border-2 border-viscoblue rounded-lg p-4 mb-6">
+      <label class="text-xs font-bold text-gray-600 uppercase block mb-1">Empresa selecionada — relatórios, análises e o CRUD abaixo são só dela</label>
+      <select id="admin-empresa-select" onchange="onTrocaEmpresaAdmin()" class="w-full p-3 border rounded text-gray-700 bg-white font-bold cursor-pointer outline-none">
+        <option value="">Carregando…</option>
+      </select>
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
       <button onclick="drawWinner()" class="bg-green-700 hover:bg-green-800 text-white font-bold p-4 rounded-lg uppercase shadow">Sortear vencedor</button>
       <button onclick="exportReport()" class="bg-viscoblue hover:bg-blue-900 text-white font-bold p-4 rounded-lg uppercase shadow">Exportar relatório (PDF)</button>
@@ -263,7 +275,9 @@ async function api(path, { method="GET", body, auth=false } = {}){
 /* =====================================================================
    2. DADOS
    ===================================================================== */
-const SETORES = ["MANUTENÇÃO MANDRINOS","BOBINADEIRAS MAQUINAS 4 E 5","ADMINISTRATIVO","BOBINADEIRAS MAQUINAS 2 E 3","SUPERVISORES E ESPECIALIZADOS","EXTRUSÃO MÁQUINAS 4 E 5","EXTRUSÃO MAQUINAS 2 E 3","UTILIDADES","VISCOSE","MANUTENÇÃO ELÉTRICA E INSTRUMENTAÇÃO","MANUTENÇÃO MECÂNICA","LABORATÓRIO","PRODUÇÃO ADMINISTRATIVO","TEMPORARIOS Viscofan","PRESTADORES DE SERVIÇOS (FIXOS)"];
+// Setores fixos só pra MODO_TESTE (sem API pra buscar as listas reais).
+// Em uso normal, empresas e setores vêm do banco — cada empresa tem os seus.
+const SETORES_DEMO = ["MANUTENÇÃO MANDRINOS","BOBINADEIRAS MAQUINAS 4 E 5","ADMINISTRATIVO","BOBINADEIRAS MAQUINAS 2 E 3","SUPERVISORES E ESPECIALIZADOS","EXTRUSÃO MÁQUINAS 4 E 5","EXTRUSÃO MAQUINAS 2 E 3","UTILIDADES","VISCOSE","MANUTENÇÃO ELÉTRICA E INSTRUMENTAÇÃO","MANUTENÇÃO MECÂNICA","LABORATÓRIO","PRODUÇÃO ADMINISTRATIVO","TEMPORARIOS Viscofan","PRESTADORES DE SERVIÇOS (FIXOS)"];
 
 // pontua:true nas perguntas "todasCertas" = sempre conta como acerto (incentivo, ninguém zera)
 const QUIZ = [
@@ -436,8 +450,7 @@ function mostrarFalha(msg){
 document.addEventListener("DOMContentLoaded", () => {
   carregarLogoParaPDF(); // não precisa esperar — se não terminar a tempo do 1º PDF, o try/catch do addImage lida com isso
 
-  const sel = document.getElementById("reg-sector");
-  SETORES.forEach(s => sel.insertAdjacentHTML("beforeend", `<option value="${s}">${s}</option>`));
+  carregarEmpresasCadastro();
 
   if(MODO_TESTE){
     document.body.insertAdjacentHTML("afterbegin", `
@@ -455,20 +468,75 @@ function formatCpf(i){
   i.value = v;
 }
 
+// Cadastro: empresa e setor em cascata — cada empresa tem sua própria
+// lista de setores, então o setor só carrega depois da empresa escolhida.
+async function carregarEmpresasCadastro(){
+  const selEmpresa = document.getElementById("reg-empresa");
+
+  if(MODO_TESTE){
+    selEmpresa.innerHTML = '<option value="demo">Modo Demonstração</option>';
+    onTrocaEmpresaCadastro();
+    return;
+  }
+
+  try {
+    const empresas = await api("/empresas");
+    selEmpresa.innerHTML = '<option value="" disabled selected>Selecione sua empresa</option>' +
+      empresas.map(e => `<option value="${esc(e.id)}">${esc(e.nome)}</option>`).join("");
+  } catch(e){
+    selEmpresa.innerHTML = '<option value="">Erro ao carregar empresas</option>';
+  }
+}
+
+async function onTrocaEmpresaCadastro(){
+  const selSetor = document.getElementById("reg-sector");
+  const empresaId = document.getElementById("reg-empresa").value;
+
+  if(MODO_TESTE){
+    selSetor.disabled = false;
+    selSetor.innerHTML = '<option value="" disabled selected>Selecione seu setor</option>' +
+      SETORES_DEMO.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join("");
+    return;
+  }
+
+  if(!empresaId){
+    selSetor.disabled = true;
+    selSetor.innerHTML = '<option value="" disabled selected>Selecione sua empresa primeiro</option>';
+    return;
+  }
+
+  selSetor.disabled = true;
+  selSetor.innerHTML = '<option value="" disabled selected>Carregando…</option>';
+  try {
+    const setores = await api("/setores?empresa_id=" + encodeURIComponent(empresaId));
+    if(!setores.length){
+      selSetor.innerHTML = '<option value="" disabled selected>Nenhum setor cadastrado pra essa empresa ainda</option>';
+      return;
+    }
+    selSetor.disabled = false;
+    selSetor.innerHTML = '<option value="" disabled selected>Selecione seu setor</option>' +
+      setores.map(s => `<option value="${esc(s.nome)}">${esc(s.nome)}</option>`).join("");
+  } catch(e){
+    selSetor.innerHTML = '<option value="" disabled selected>Erro ao carregar setores</option>';
+  }
+}
+
 /* =====================================================================
    4. FLUXO DO PARTICIPANTE
    ===================================================================== */
 function startQuiz(){
+  const empresaId = document.getElementById("reg-empresa").value;
   const nome   = document.getElementById("reg-name").value.trim();
   const cpf    = document.getElementById("reg-cpf").value.trim();
   const setor  = document.getElementById("reg-sector").value;
   const aceite = document.getElementById("reg-consent").checked;
 
+  if(!empresaId)              return alert("Selecione sua empresa.");
   if(!nome || !cpf || !setor) return alert("Preencha nome, CPF e setor.");
   if(cpf.length !== 14)       return alert("Digite um CPF completo.");
   if(!aceite)                 return alert("Marque a autorização para continuar.");
 
-  S = { fase:"quiz", idx:0, acertos:0, participante:{nome,cpf,setor}, respQuiz:[], respPesquisa:[] };
+  S = { fase:"quiz", idx:0, acertos:0, participante:{empresaId,nome,cpf,setor}, respQuiz:[], respPesquisa:[] };
   showScreen("screen-quiz");
   render();
 }
@@ -573,6 +641,7 @@ async function saveQuiz(){
   let error = null;
   try {
     await api("/participantes", { method:"POST", body:{
+      empresa_id: S.participante.empresaId,
       nome:   S.participante.nome,
       cpf:    S.participante.cpf,
       setor:  S.participante.setor,
@@ -622,6 +691,7 @@ async function savePesquisa(){
   let error = null;
   try {
     await api("/pesquisa-gro", { method:"POST", body:{
+      empresa_id: S.participante.empresaId,
       setor: S.participante.setor,
       respostas: S.respPesquisa.map(r => ({ pergunta:r.pergunta, resposta:r.resposta })),
       nota_clima: nota
@@ -632,7 +702,7 @@ async function savePesquisa(){
 
   if(error) return mostrarErro("Não foi possível enviar a pesquisa.", error, savePesquisa);
 
-  try { await api("/participantes/marcar-pesquisa", { method:"POST", body:{ cpf: S.participante.cpf } }); } catch(e){}
+  try { await api("/participantes/marcar-pesquisa", { method:"POST", body:{ cpf: S.participante.cpf, empresa_id: S.participante.empresaId } }); } catch(e){}
   showResult();
 }
 
@@ -662,13 +732,16 @@ function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt
    5. ADMIN
    ===================================================================== */
 let CACHE = { participantes:[], pesquisa:[], metas:{} };
+let ADMIN_EMPRESA_ID = null;
+let ADMIN_EMPRESAS_CACHE = [];
+let ADMIN_SETORES_CACHE = []; // setores da empresa selecionada no painel
 
 async function doLogin(){
   const err = document.getElementById("login-error");
   err.classList.add("hidden");
   if(MODO_TESTE){
     showScreen("screen-admin");
-    loadDashboard();
+    carregarEmpresasAdmin();
     return;
   }
   let resp;
@@ -683,7 +756,59 @@ async function doLogin(){
   setToken(resp.token);
   document.getElementById("adm-pass").value = "";
   showScreen("screen-admin");
+  carregarEmpresasAdmin();
+}
+
+// Popula o seletor de empresa do painel e carrega a primeira por padrão.
+async function carregarEmpresasAdmin(){
+  const sel = document.getElementById("admin-empresa-select");
+
+  if(MODO_TESTE){
+    sel.innerHTML = '<option value="demo">Modo Demonstração</option>';
+    ADMIN_EMPRESA_ID = "demo";
+    await carregarSetoresAdmin();
+    loadDashboard();
+    return;
+  }
+
+  try {
+    ADMIN_EMPRESAS_CACHE = await api("/empresas", { auth:true });
+  } catch(e){
+    sel.innerHTML = '<option value="">Erro ao carregar empresas</option>';
+    return;
+  }
+
+  if(!ADMIN_EMPRESAS_CACHE.length){
+    sel.innerHTML = '<option value="">Nenhuma empresa cadastrada</option>';
+    ADMIN_EMPRESA_ID = null;
+    return;
+  }
+
+  sel.innerHTML = ADMIN_EMPRESAS_CACHE.map(e => `<option value="${esc(e.id)}">${esc(e.nome)}</option>`).join("");
+  ADMIN_EMPRESA_ID = sel.value = ADMIN_EMPRESAS_CACHE[0].id;
+  await carregarSetoresAdmin();
   loadDashboard();
+}
+
+async function onTrocaEmpresaAdmin(){
+  ADMIN_EMPRESA_ID = document.getElementById("admin-empresa-select").value;
+  await carregarSetoresAdmin();
+  loadDashboard();
+  if(CRUD_ATUAL && !document.getElementById("screen-db-crud").classList.contains("hidden")){
+    carregarTabelaCrud();
+  }
+}
+
+async function carregarSetoresAdmin(){
+  if(MODO_TESTE || !ADMIN_EMPRESA_ID){
+    ADMIN_SETORES_CACHE = SETORES_DEMO.map(nome => ({ nome }));
+    return;
+  }
+  try {
+    ADMIN_SETORES_CACHE = await api("/setores?empresa_id=" + encodeURIComponent(ADMIN_EMPRESA_ID), { auth:true });
+  } catch(e){
+    ADMIN_SETORES_CACHE = [];
+  }
 }
 
 function doLogout(){
@@ -753,11 +878,14 @@ async function loadDashboard(){
     return;
   }
 
+  if(!ADMIN_EMPRESA_ID){ dash.innerHTML = '<p class="text-gray-500 text-center py-6">Selecione uma empresa.</p>'; return; }
+  const qs = "?empresa_id=" + encodeURIComponent(ADMIN_EMPRESA_ID);
+
   let participantes, pesquisa;
   try {
     [participantes, pesquisa] = await Promise.all([
-      api("/participantes", { auth:true }),
-      api("/pesquisa-gro", { auth:true })
+      api("/participantes" + qs, { auth:true }),
+      api("/pesquisa-gro" + qs, { auth:true })
     ]);
   } catch(e){
     dash.innerHTML = `<p class="text-red-600 text-center py-6">Erro ao carregar: ${esc(e.message)}</p>`;
@@ -768,14 +896,14 @@ async function loadDashboard(){
   // (SQL antigo), degrada com metas vazias em vez de quebrar o painel.
   let metas = {};
   try {
-    const m = await api("/metas-setor", { auth:true });
+    const m = await api("/metas-setor" + qs, { auth:true });
     if(m) m.forEach(row => metas[row.setor] = row.meta);
   } catch(e){ console.warn("Tabela metas_setor indisponível:", e); }
 
   // Config de envio também é opcional/recente — mesma lógica de degradação.
   let configEnvio = {};
   try {
-    const c = await api("/config-envio", { auth:true });
+    const c = await api("/config-envio" + qs, { auth:true });
     if(c) configEnvio = c;
   } catch(e){ console.warn("Tabela config_envio indisponível:", e); }
   preencherCamposConfig(configEnvio);
@@ -925,7 +1053,7 @@ async function salvarMeta(sec){
 
   if(!MODO_TESTE){
     try {
-      await api("/metas-setor", { method:"PUT", auth:true, body:{ setor: sec, meta: valor } });
+      await api("/metas-setor", { method:"PUT", auth:true, body:{ empresa_id: ADMIN_EMPRESA_ID, setor: sec, meta: valor } });
     } catch(e){
       alert("Não foi possível salvar a meta.\n\nDetalhe: " + e.message +
             "\n\nSe a mensagem mencionar 'relation... does not exist', rode 'npm run migrate' no backend.");
@@ -1655,6 +1783,7 @@ function preencherCamposConfig(cfg){
 async function salvarConfigEnvio(){
   const status = document.getElementById("config-envio-status");
   const cfg = {
+    empresa_id: ADMIN_EMPRESA_ID,
     email1: document.getElementById("cfg-email1").value.trim(),
     email2: document.getElementById("cfg-email2").value.trim(),
     email3: document.getElementById("cfg-email3").value.trim(),
@@ -1751,28 +1880,34 @@ async function enviarRelatorio(canal){
 
 async function clearAll(){
   if(MODO_TESTE) return alert("Modo demonstração: não há dados reais para apagar.");
-  if(!confirm("Apagar TODOS os participantes e todas as respostas da pesquisa? Não há como desfazer.")) return;
+  if(!ADMIN_EMPRESA_ID) return alert("Selecione uma empresa primeiro.");
+  const nomeEmpresa = (ADMIN_EMPRESAS_CACHE.find(e => e.id === ADMIN_EMPRESA_ID) || {}).nome || "";
+  if(!confirm(`Apagar TODOS os participantes e todas as respostas da pesquisa de "${nomeEmpresa}"? Isso não afeta outras empresas. Não há como desfazer.`)) return;
   if(prompt('Digite APAGAR para confirmar.') !== "APAGAR") return;
-  await api("/participantes", { method:"DELETE", auth:true });
-  await api("/pesquisa-gro", { method:"DELETE", auth:true });
+  await api("/participantes?empresa_id=" + encodeURIComponent(ADMIN_EMPRESA_ID), { method:"DELETE", auth:true });
+  await api("/pesquisa-gro?empresa_id=" + encodeURIComponent(ADMIN_EMPRESA_ID), { method:"DELETE", auth:true });
   loadDashboard();
 }
 
 /* =====================================================================
    6. CRUD GENÉRICO DAS TABELAS (Banco de Dados)
-   config_envio fica de fora de propósito: é registro único (id=1) e já
-   tem edição dedicada na seção "Contatos para envio" acima.
+   scopedPorEmpresa:true = a tabela é filtrada/gravada sempre dentro da
+   empresa selecionada no topo do painel (ADMIN_EMPRESA_ID), injetado
+   automaticamente — não aparece como campo no formulário.
+   config_envio fica de fora de propósito: é registro único por empresa
+   e já tem edição dedicada na seção "Contatos para envio" acima.
    ===================================================================== */
 const CRUD_TABELAS = {
   participantes: {
     label: "Participantes",
     api: "/participantes",
     idKey: "id",
+    scopedPorEmpresa: true,
     colunasTabela: ["nome","cpf","setor","acertos","respondeu_pesquisa","criado_em"],
     campos: [
       { key:"nome", label:"Nome", tipo:"text", obrigatorio:true },
       { key:"cpf", label:"CPF", tipo:"text", obrigatorio:true },
-      { key:"setor", label:"Setor", tipo:"select", opcoes:SETORES, obrigatorio:true },
+      { key:"setor", label:"Setor", tipo:"select", opcoes:() => ADMIN_SETORES_CACHE.map(s=>s.nome), obrigatorio:true },
       { key:"acertos", label:"Acertos", tipo:"number", obrigatorio:true },
       { key:"total", label:"Total", tipo:"number", obrigatorio:true },
       { key:"respondeu_pesquisa", label:"Respondeu GRO", tipo:"checkbox" },
@@ -1783,9 +1918,10 @@ const CRUD_TABELAS = {
     label: "Pesquisa GRO",
     api: "/pesquisa-gro",
     idKey: "id",
+    scopedPorEmpresa: true,
     colunasTabela: ["setor","nota_clima","criado_em"],
     campos: [
-      { key:"setor", label:"Setor", tipo:"select", opcoes:SETORES, obrigatorio:true },
+      { key:"setor", label:"Setor", tipo:"select", opcoes:() => ADMIN_SETORES_CACHE.map(s=>s.nome), obrigatorio:true },
       { key:"nota_clima", label:"Nota Clima (0-10)", tipo:"number" },
       { key:"respostas", label:"Respostas (JSON)", tipo:"json" },
     ]
@@ -1794,18 +1930,40 @@ const CRUD_TABELAS = {
     label: "Metas por Setor",
     api: "/metas-setor",
     idKey: "setor",
+    scopedPorEmpresa: true,
     upsertBase: true, // criar/editar sempre via PUT na URL base (setor vem no corpo)
     idSomenteCriacao: true,
     colunasTabela: ["setor","meta","atualizado_em"],
     campos: [
-      { key:"setor", label:"Setor", tipo:"select", opcoes:SETORES, obrigatorio:true },
+      { key:"setor", label:"Setor", tipo:"select", opcoes:() => ADMIN_SETORES_CACHE.map(s=>s.nome), obrigatorio:true },
       { key:"meta", label:"Meta", tipo:"number", obrigatorio:true },
+    ]
+  },
+  setores: {
+    label: "Setores (da empresa selecionada)",
+    api: "/setores",
+    idKey: "id",
+    scopedPorEmpresa: true,
+    colunasTabela: ["nome"],
+    campos: [
+      { key:"nome", label:"Nome do setor", tipo:"text", obrigatorio:true },
+    ]
+  },
+  empresas: {
+    label: "Empresas",
+    api: "/empresas",
+    idKey: "id",
+    scopedPorEmpresa: false,
+    colunasTabela: ["nome","criado_em"],
+    campos: [
+      { key:"nome", label:"Nome da empresa", tipo:"text", obrigatorio:true },
     ]
   },
   admin_users: {
     label: "Administradores",
     api: "/admin-users",
     idKey: "id",
+    scopedPorEmpresa: false,
     colunasTabela: ["email","criado_em"],
     campos: [
       { key:"email", label:"E-mail", tipo:"text", obrigatorio:true },
@@ -1820,7 +1978,7 @@ let CRUD_EDITANDO = null; // índice em CRUD_DADOS, ou null = criando novo
 
 function abrirGerenciadorBD(){
   showScreen("screen-db-crud");
-  selecionarTabelaCrud(Object.keys(CRUD_TABELAS)[0]);
+  selecionarTabelaCrud("participantes");
 }
 
 function renderAbasCrud(){
@@ -1848,11 +2006,29 @@ async function carregarTabelaCrud(){
     return;
   }
 
+  if(def.scopedPorEmpresa && !ADMIN_EMPRESA_ID){
+    cont.innerHTML = '<p class="text-gray-500 text-center py-6">Selecione uma empresa.</p>';
+    return;
+  }
+
+  const url = def.api + (def.scopedPorEmpresa ? "?empresa_id=" + encodeURIComponent(ADMIN_EMPRESA_ID) : "");
   try {
-    CRUD_DADOS = await api(def.api, { auth:true }) || [];
+    CRUD_DADOS = await api(url, { auth:true }) || [];
   } catch(e){
     cont.innerHTML = `<p class="text-red-600 text-center py-6">Erro ao carregar: ${esc(e.message)}</p>`;
     return;
+  }
+
+  // Mantém os caches usados pelos seletores (setor nos formulários,
+  // empresa no topo do painel) sincronizados com o que acabou de ser
+  // editado aqui, sem precisar recarregar a página.
+  if(CRUD_ATUAL === "setores") ADMIN_SETORES_CACHE = CRUD_DADOS;
+  if(CRUD_ATUAL === "empresas"){
+    ADMIN_EMPRESAS_CACHE = CRUD_DADOS;
+    const sel = document.getElementById("admin-empresa-select");
+    const atual = sel.value;
+    sel.innerHTML = CRUD_DADOS.map(e => `<option value="${esc(e.id)}">${esc(e.nome)}</option>`).join("");
+    sel.value = CRUD_DADOS.some(e => e.id === atual) ? atual : (CRUD_DADOS[0] && CRUD_DADOS[0].id) || "";
   }
 
   if(!CRUD_DADOS.length){
@@ -1913,11 +2089,12 @@ function abrirFormularioCrud(indice){
     const desabilitado = travarPk && campo.key === def.idKey;
 
     if(campo.tipo === "select"){
+      const opcoes = typeof campo.opcoes === "function" ? campo.opcoes() : campo.opcoes;
       return `<div>
         <label class="text-xs font-bold text-gray-600 uppercase block mb-1">${esc(campo.label)}</label>
         <select id="${idInput}" ${desabilitado?"disabled":""} class="border rounded p-2 text-sm w-full">
           <option value="">Selecione…</option>
-          ${campo.opcoes.map(o => `<option value="${esc(o)}" ${o===valorAtual?"selected":""}>${esc(o)}</option>`).join("")}
+          ${opcoes.map(o => `<option value="${esc(o)}" ${o===valorAtual?"selected":""}>${esc(o)}</option>`).join("")}
         </select>
       </div>`;
     }
@@ -1980,6 +2157,10 @@ async function salvarFormularioCrud(){
     corpo[def.idKey] = CRUD_DADOS[CRUD_EDITANDO][def.idKey];
   }
 
+  // empresa_id nunca é um campo visível no form — vem sempre da empresa
+  // selecionada no topo do painel.
+  if(def.scopedPorEmpresa) corpo.empresa_id = ADMIN_EMPRESA_ID;
+
   for(const campo of def.campos){
     const vazio = corpo[campo.key] == null || corpo[campo.key] === "";
     if(campo.obrigatorio && vazio && campo.tipo !== "password"){
@@ -2014,8 +2195,10 @@ async function apagarLinhaCrud(indice){
   const def = CRUD_TABELAS[CRUD_ATUAL];
   const row = CRUD_DADOS[indice];
   if(!confirm("Apagar este registro? Não há como desfazer.")) return;
+  let url = def.api + "/" + encodeURIComponent(row[def.idKey]);
+  if(def.scopedPorEmpresa) url += "?empresa_id=" + encodeURIComponent(ADMIN_EMPRESA_ID);
   try {
-    await api(def.api + "/" + encodeURIComponent(row[def.idKey]), { method:"DELETE", auth:true });
+    await api(url, { method:"DELETE", auth:true });
     await carregarTabelaCrud();
   } catch(e){
     alert("Erro ao apagar: " + e.message);
