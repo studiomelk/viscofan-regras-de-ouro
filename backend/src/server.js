@@ -10,6 +10,8 @@ const pesquisaGroRoutes = require("./routes/pesquisaGro");
 const metasSetorRoutes = require("./routes/metasSetor");
 const configEnvioRoutes = require("./routes/configEnvio");
 const adminUsersRoutes = require("./routes/adminUsers");
+const empresasRoutes = require("./routes/empresas");
+const setoresRoutes = require("./routes/setores");
 const { router: uploadRoutes, UPLOAD_DIR } = require("./routes/upload");
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -27,6 +29,8 @@ app.use("/api/pesquisa-gro", pesquisaGroRoutes);
 app.use("/api/metas-setor", metasSetorRoutes);
 app.use("/api/config-envio", configEnvioRoutes);
 app.use("/api/admin-users", adminUsersRoutes);
+app.use("/api/empresas", empresasRoutes);
+app.use("/api/setores", setoresRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/uploads", express.static(UPLOAD_DIR));
 
