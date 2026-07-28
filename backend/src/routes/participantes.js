@@ -7,16 +7,16 @@ const router = express.Router();
 
 // Público — visitante cadastra participante e responde o quiz.
 router.post("/", async (req, res) => {
-  const { nome, cpf, setor, acertos, total, respostas } = req.body || {};
-  if (!nome || !cpf || !setor || acertos == null || total == null || !respostas) {
+  const { empresa_id, nome, cpf, setor, acertos, total, respostas } = req.body || {};
+  if (!empresa_id || !nome || !cpf || !setor || acertos == null || total == null || !respostas) {
     return res.status(400).json({ error: "Campos obrigatórios faltando." });
   }
   try {
     const { rows } = await pool.query(
-      `insert into participantes (nome, cpf, setor, acertos, total, respostas)
-       values ($1, $2, $3, $4, $5, $6)
+      `insert into participantes (empresa_id, nome, cpf, setor, acertos, total, respostas)
+       values ($1, $2, $3, $4, $5, $6, $7)
        returning *`,
-      [nome, cpf, setor, acertos, total, JSON.stringify(respostas)]
+      [empresa_id, nome, cpf, setor, acertos, total, JSON.stringify(respostas)]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -29,38 +29,47 @@ router.post("/", async (req, res) => {
 });
 
 // Público — marca que o participante concluiu a pesquisa GRO.
+// Escopado por empresa: CPF só é único dentro da mesma empresa, então
+// casar só por CPF poderia acertar o participante errado de outra empresa.
 router.post("/marcar-pesquisa", asyncHandler(async (req, res) => {
-  const { cpf } = req.body || {};
-  if (!cpf) return res.status(400).json({ error: "CPF é obrigatório." });
+  const { cpf, empresa_id } = req.body || {};
+  if (!cpf || !empresa_id) return res.status(400).json({ error: "CPF e empresa_id são obrigatórios." });
   await pool.query(
-    "update participantes set respondeu_pesquisa = true where cpf = $1",
-    [cpf]
+    "update participantes set respondeu_pesquisa = true where cpf = $1 and empresa_id = $2",
+    [cpf, empresa_id]
   );
   res.status(204).end();
 }));
 
-// Admin — lista todos os participantes.
-router.get("/", requireAdmin, asyncHandler(async (_req, res) => {
-  const { rows } = await pool.query("select * from participantes order by criado_em");
+// Admin — lista participantes. ?empresa_id= filtra por empresa (o painel
+// sempre manda; sem o filtro, retorna de todas as empresas).
+router.get("/", requireAdmin, asyncHandler(async (req, res) => {
+  const { empresa_id } = req.query;
+  const { rows } = empresa_id
+    ? await pool.query("select * from participantes where empresa_id = $1 order by criado_em", [empresa_id])
+    : await pool.query("select * from participantes order by criado_em");
   res.json(rows);
 }));
 
-// Admin — apaga todos os participantes ("zerar sistema").
-router.delete("/", requireAdmin, asyncHandler(async (_req, res) => {
-  await pool.query("delete from participantes");
+// Admin — apaga participantes de uma empresa ("zerar sistema"). Exige
+// empresa_id pra nunca apagar todas as empresas de uma vez sem querer.
+router.delete("/", requireAdmin, asyncHandler(async (req, res) => {
+  const { empresa_id } = req.query;
+  if (!empresa_id) return res.status(400).json({ error: "empresa_id é obrigatório." });
+  await pool.query("delete from participantes where empresa_id = $1", [empresa_id]);
   res.status(204).end();
 }));
 
 // Admin — edita um participante (CRUD do painel).
 router.put("/:id", requireAdmin, asyncHandler(async (req, res) => {
-  const { nome, cpf, setor, acertos, total, respostas, respondeu_pesquisa } = req.body || {};
+  const { empresa_id, nome, cpf, setor, acertos, total, respostas, respondeu_pesquisa } = req.body || {};
   const { rows } = await pool.query(
     `update participantes
-        set nome = $2, cpf = $3, setor = $4, acertos = $5, total = $6,
-            respostas = $7, respondeu_pesquisa = $8
+        set empresa_id = $2, nome = $3, cpf = $4, setor = $5, acertos = $6, total = $7,
+            respostas = $8, respondeu_pesquisa = $9
       where id = $1
       returning *`,
-    [req.params.id, nome, cpf, setor, acertos, total, JSON.stringify(respostas), !!respondeu_pesquisa]
+    [req.params.id, empresa_id, nome, cpf, setor, acertos, total, JSON.stringify(respostas), !!respondeu_pesquisa]
   );
   if (!rows[0]) return res.status(404).json({ error: "Participante não encontrado." });
   res.json(rows[0]);
