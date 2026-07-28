@@ -5,11 +5,43 @@ const asyncHandler = require("../asyncHandler");
 
 const router = express.Router();
 
-// Público — a tela de cadastro do participante precisa listar as
-// empresas pra oferecer o seletor antes do quiz.
+// Admin — lista todas as empresas (pro seletor de navegação do painel).
 router.get("/", asyncHandler(async (_req, res) => {
   const { rows } = await pool.query("select * from empresas order by nome");
   res.json(rows);
+}));
+
+// Público — a tela de cadastro do participante não deixa escolher a
+// empresa; ela só sabe qual é a empresa ativa e usa essa, sem opção.
+router.get("/ativa", asyncHandler(async (_req, res) => {
+  const { rows } = await pool.query("select * from empresas where ativa = true limit 1");
+  res.json(rows[0] || null);
+}));
+
+// Admin — define qual empresa passa a receber as respostas do formulário
+// público. Transação: zera todas antes de ativar a escolhida, garantindo
+// que só uma fica ativa por vez.
+router.post("/:id/ativar", requireAdmin, asyncHandler(async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query("update empresas set ativa = false where ativa = true");
+    const { rows } = await client.query(
+      "update empresas set ativa = true where id = $1 returning *",
+      [req.params.id]
+    );
+    if (!rows[0]) {
+      await client.query("rollback");
+      return res.status(404).json({ error: "Empresa não encontrada." });
+    }
+    await client.query("commit");
+    res.json(rows[0]);
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
 }));
 
 router.post("/", requireAdmin, asyncHandler(async (req, res) => {
