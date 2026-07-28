@@ -39,12 +39,10 @@
       <input type="text" id="reg-cpf" placeholder="CPF (000.000.000-00)" maxlength="14" oninput="formatCpf(this)" class="w-full p-3 border rounded outline-none">
     </div>
 
-    <select id="reg-empresa" onchange="onTrocaEmpresaCadastro()" class="w-full p-3 border rounded text-gray-700 bg-white cursor-pointer outline-none">
-      <option value="" disabled selected>Selecione sua empresa</option>
-    </select>
+    <p id="reg-empresa-info" class="text-sm text-center text-gray-500 font-bold uppercase"></p>
 
     <select id="reg-sector" disabled class="w-full p-3 border rounded text-gray-700 bg-white cursor-pointer outline-none disabled:bg-gray-100 disabled:cursor-not-allowed">
-      <option value="" disabled selected>Selecione sua empresa primeiro</option>
+      <option value="" disabled selected>Carregando…</option>
     </select>
 
     <label class="flex gap-3 items-start bg-gray-50 border border-gray-200 rounded p-4 text-sm text-gray-700 cursor-pointer">
@@ -119,6 +117,15 @@
       <select id="admin-empresa-select" onchange="onTrocaEmpresaAdmin()" class="w-full p-3 border rounded text-gray-700 bg-white font-bold cursor-pointer outline-none">
         <option value="">Carregando…</option>
       </select>
+      <div class="mt-3 pt-3 border-t flex flex-wrap items-center justify-between gap-3">
+        <p class="text-xs text-gray-600">
+          Empresa ativa no formulário público (quem responde não escolhe, é sempre esta):
+          <strong id="empresa-ativa-label" class="text-viscoblue">—</strong>
+        </p>
+        <button onclick="definirEmpresaAtiva()" class="bg-viscorange hover:bg-orange-700 text-white px-4 py-2 rounded text-xs font-bold uppercase shadow shrink-0">
+          Definir selecionada como ativa
+        </button>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -450,7 +457,7 @@ function mostrarFalha(msg){
 document.addEventListener("DOMContentLoaded", () => {
   carregarLogoParaPDF(); // não precisa esperar — se não terminar a tempo do 1º PDF, o try/catch do addImage lida com isso
 
-  carregarEmpresasCadastro();
+  carregarEmpresaAtivaCadastro();
 
   if(MODO_TESTE){
     document.body.insertAdjacentHTML("afterbegin", `
@@ -468,55 +475,47 @@ function formatCpf(i){
   i.value = v;
 }
 
-// Cadastro: empresa e setor em cascata — cada empresa tem sua própria
-// lista de setores, então o setor só carrega depois da empresa escolhida.
-async function carregarEmpresasCadastro(){
-  const selEmpresa = document.getElementById("reg-empresa");
+// Cadastro: NÃO existe seletor de empresa — o participante só vê o
+// setor da empresa que o admin definiu como "ativa" no painel. Evita que
+// alguém escolha a empresa errada, e mantém as respostas sempre
+// atreladas à empresa que a área administrativa configurou.
+let PARTICIPANTE_EMPRESA_ID = null;
 
-  if(MODO_TESTE){
-    selEmpresa.innerHTML = '<option value="demo">Modo Demonstração</option>';
-    onTrocaEmpresaCadastro();
-    return;
-  }
-
-  try {
-    const empresas = await api("/empresas");
-    selEmpresa.innerHTML = '<option value="" disabled selected>Selecione sua empresa</option>' +
-      empresas.map(e => `<option value="${esc(e.id)}">${esc(e.nome)}</option>`).join("");
-  } catch(e){
-    selEmpresa.innerHTML = '<option value="">Erro ao carregar empresas</option>';
-  }
-}
-
-async function onTrocaEmpresaCadastro(){
+async function carregarEmpresaAtivaCadastro(){
+  const info = document.getElementById("reg-empresa-info");
   const selSetor = document.getElementById("reg-sector");
-  const empresaId = document.getElementById("reg-empresa").value;
 
   if(MODO_TESTE){
+    PARTICIPANTE_EMPRESA_ID = "demo";
+    info.innerText = "Modo Demonstração";
     selSetor.disabled = false;
     selSetor.innerHTML = '<option value="" disabled selected>Selecione seu setor</option>' +
       SETORES_DEMO.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join("");
     return;
   }
 
-  if(!empresaId){
-    selSetor.disabled = true;
-    selSetor.innerHTML = '<option value="" disabled selected>Selecione sua empresa primeiro</option>';
-    return;
-  }
-
-  selSetor.disabled = true;
-  selSetor.innerHTML = '<option value="" disabled selected>Carregando…</option>';
   try {
-    const setores = await api("/setores?empresa_id=" + encodeURIComponent(empresaId));
+    const ativa = await api("/empresas/ativa");
+    if(!ativa){
+      PARTICIPANTE_EMPRESA_ID = null;
+      info.innerText = "Formulário indisponível no momento — fale com o organizador.";
+      selSetor.innerHTML = '<option value="" disabled selected>Formulário indisponível</option>';
+      return;
+    }
+
+    PARTICIPANTE_EMPRESA_ID = ativa.id;
+    info.innerText = "Você está respondendo por: " + ativa.nome;
+
+    const setores = await api("/setores?empresa_id=" + encodeURIComponent(ativa.id));
     if(!setores.length){
-      selSetor.innerHTML = '<option value="" disabled selected>Nenhum setor cadastrado pra essa empresa ainda</option>';
+      selSetor.innerHTML = '<option value="" disabled selected>Nenhum setor cadastrado ainda</option>';
       return;
     }
     selSetor.disabled = false;
     selSetor.innerHTML = '<option value="" disabled selected>Selecione seu setor</option>' +
       setores.map(s => `<option value="${esc(s.nome)}">${esc(s.nome)}</option>`).join("");
   } catch(e){
+    info.innerText = "Erro ao carregar. Recarregue a página.";
     selSetor.innerHTML = '<option value="" disabled selected>Erro ao carregar setores</option>';
   }
 }
@@ -525,18 +524,17 @@ async function onTrocaEmpresaCadastro(){
    4. FLUXO DO PARTICIPANTE
    ===================================================================== */
 function startQuiz(){
-  const empresaId = document.getElementById("reg-empresa").value;
   const nome   = document.getElementById("reg-name").value.trim();
   const cpf    = document.getElementById("reg-cpf").value.trim();
   const setor  = document.getElementById("reg-sector").value;
   const aceite = document.getElementById("reg-consent").checked;
 
-  if(!empresaId)              return alert("Selecione sua empresa.");
+  if(!PARTICIPANTE_EMPRESA_ID) return alert("Formulário indisponível no momento — fale com o organizador.");
   if(!nome || !cpf || !setor) return alert("Preencha nome, CPF e setor.");
   if(cpf.length !== 14)       return alert("Digite um CPF completo.");
   if(!aceite)                 return alert("Marque a autorização para continuar.");
 
-  S = { fase:"quiz", idx:0, acertos:0, participante:{empresaId,nome,cpf,setor}, respQuiz:[], respPesquisa:[] };
+  S = { fase:"quiz", idx:0, acertos:0, participante:{empresaId:PARTICIPANTE_EMPRESA_ID,nome,cpf,setor}, respQuiz:[], respPesquisa:[] };
   showScreen("screen-quiz");
   render();
 }
@@ -766,6 +764,7 @@ async function carregarEmpresasAdmin(){
   if(MODO_TESTE){
     sel.innerHTML = '<option value="demo">Modo Demonstração</option>';
     ADMIN_EMPRESA_ID = "demo";
+    document.getElementById("empresa-ativa-label").innerText = "Modo Demonstração";
     await carregarSetoresAdmin();
     loadDashboard();
     return;
@@ -787,7 +786,36 @@ async function carregarEmpresasAdmin(){
   sel.innerHTML = ADMIN_EMPRESAS_CACHE.map(e => `<option value="${esc(e.id)}">${esc(e.nome)}</option>`).join("");
   ADMIN_EMPRESA_ID = sel.value = ADMIN_EMPRESAS_CACHE[0].id;
   await carregarSetoresAdmin();
+  await carregarEmpresaAtivaAdmin();
   loadDashboard();
+}
+
+// Mostra qual empresa está ativa no formulário público (não confundir
+// com a "empresa selecionada" acima, que é só pra navegar no painel).
+async function carregarEmpresaAtivaAdmin(){
+  const label = document.getElementById("empresa-ativa-label");
+  try {
+    const ativa = await api("/empresas/ativa");
+    label.innerText = ativa ? ativa.nome : "Nenhuma (formulário público indisponível)";
+  } catch(e){
+    label.innerText = "Erro ao carregar";
+  }
+}
+
+// Ação explícita e separada de "selecionar pra navegar": só muda quem
+// recebe respostas novas quando o admin clica aqui de propósito.
+async function definirEmpresaAtiva(){
+  if(MODO_TESTE) return alert("Modo demonstração: não aplicável.");
+  if(!ADMIN_EMPRESA_ID) return alert("Selecione uma empresa primeiro.");
+  const nome = (ADMIN_EMPRESAS_CACHE.find(e => e.id === ADMIN_EMPRESA_ID) || {}).nome || "";
+  if(!confirm(`Definir "${nome}" como a empresa que recebe as respostas do formulário público agora?\n\nIsso substitui a empresa ativa atual — quem estiver respondendo o formulário passa a ser vinculado a "${nome}".`)) return;
+  try {
+    await api("/empresas/" + encodeURIComponent(ADMIN_EMPRESA_ID) + "/ativar", { method:"POST", auth:true });
+    await carregarEmpresaAtivaAdmin();
+    alert(`Empresa ativa definida: ${nome}.`);
+  } catch(e){
+    alert("Erro ao definir empresa ativa: " + e.message);
+  }
 }
 
 async function onTrocaEmpresaAdmin(){
