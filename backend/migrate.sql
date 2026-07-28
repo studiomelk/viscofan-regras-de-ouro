@@ -96,6 +96,18 @@ create table if not exists empresas (
 -- Dado histórico: tudo que já existia no banco era da Viscofan.
 insert into empresas (nome) values ('Viscofan') on conflict (nome) do nothing;
 
+-- "ativa" = qual empresa recebe as respostas do formulário público agora.
+-- Só uma pode estar true por vez (garantido pela rota /empresas/:id/ativar,
+-- que zera as outras numa transação — não dá pra expressar isso só com
+-- constraint simples aqui).
+alter table empresas add column if not exists ativa boolean not null default false;
+
+-- Se nenhuma empresa está ativa ainda (banco novo ou recém-migrado),
+-- ativa a primeira pra não deixar o formulário público sem empresa.
+update empresas set ativa = true
+where id = (select id from empresas order by criado_em limit 1)
+  and not exists (select 1 from empresas where ativa = true);
+
 -- ---------------------------------------------------------------------
 -- TABELA 7 — Setores, agora por empresa (cada empresa tem os seus).
 -- ---------------------------------------------------------------------
