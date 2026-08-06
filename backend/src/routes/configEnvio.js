@@ -1,4 +1,5 @@
 const express = require("express");
+const bcrypt = require("bcryptjs");
 const pool = require("../db");
 const { requireAdmin } = require("../auth");
 const asyncHandler = require("../asyncHandler");
@@ -8,8 +9,27 @@ const router = express.Router();
 router.get("/", requireAdmin, asyncHandler(async (req, res) => {
   const { empresa_id } = req.query;
   if (!empresa_id) return res.status(400).json({ error: "empresa_id é obrigatório." });
-  const { rows } = await pool.query("select * from config_envio where empresa_id = $1", [empresa_id]);
+  const { rows } = await pool.query(
+    "select empresa_id, email1, email2, email3, whatsapp1, whatsapp2, whatsapp3, atualizado_em, (relatorio_senha_hash is not null) as relatorio_tem_senha from config_envio where empresa_id = $1",
+    [empresa_id]
+  );
   res.json(rows[0] || null);
+}));
+
+// Admin — define/troca a senha do link público do relatório. Fica numa
+// rota própria porque envolve hash de senha, separado dos outros campos.
+router.put("/senha-relatorio", requireAdmin, asyncHandler(async (req, res) => {
+  const { empresa_id, senha } = req.body || {};
+  if (!empresa_id || !senha) return res.status(400).json({ error: "empresa_id e senha são obrigatórios." });
+  if (senha.length < 4) return res.status(400).json({ error: "Senha muito curta (mínimo 4 caracteres)." });
+  const hash = await bcrypt.hash(senha, 10);
+  await pool.query(
+    `insert into config_envio (empresa_id, relatorio_senha_hash, atualizado_em)
+     values ($1, $2, now())
+     on conflict (empresa_id) do update set relatorio_senha_hash = excluded.relatorio_senha_hash, atualizado_em = now()`,
+    [empresa_id, hash]
+  );
+  res.status(204).end();
 }));
 
 router.put("/", requireAdmin, asyncHandler(async (req, res) => {
