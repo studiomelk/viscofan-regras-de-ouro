@@ -132,9 +132,18 @@
       <button onclick="drawWinner()" class="bg-green-700 hover:bg-green-800 text-white font-bold p-4 rounded-lg uppercase shadow">Sortear vencedor</button>
       <button onclick="exportReport()" class="bg-viscoblue hover:bg-blue-900 text-white font-bold p-4 rounded-lg uppercase shadow">Exportar relatório (PDF)</button>
     </div>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
       <button id="btn-enviar-email" onclick="enviarRelatorio('email')" class="bg-gray-700 hover:bg-gray-800 text-white font-bold p-4 rounded-lg uppercase shadow">📧 Enviar por e-mail</button>
       <button id="btn-enviar-whatsapp" onclick="enviarRelatorio('whatsapp')" class="bg-green-600 hover:bg-green-700 text-white font-bold p-4 rounded-lg uppercase shadow">💬 Enviar por WhatsApp</button>
+    </div>
+
+    <div class="bg-white border border-gray-200 rounded-lg p-4 mb-6 flex flex-wrap items-end gap-3">
+      <div>
+        <label class="text-xs font-bold text-gray-600 uppercase block mb-1">Relatório de um dia específico</label>
+        <input id="filtro-dia-pdf" type="date" class="border rounded p-2 text-sm">
+      </div>
+      <button onclick="exportReportDoDia()" class="bg-viscoblue hover:bg-blue-900 text-white font-bold px-4 py-2 rounded text-sm uppercase shadow">📅 Baixar PDF desse dia</button>
+      <p class="text-xs text-gray-500 w-full">Filtra os dados do ciclo atual (ainda não arquivado) pela data escolhida.</p>
     </div>
 
     <!-- ===== Cadastro de contatos para envio ===== -->
@@ -160,6 +169,44 @@
         </div>
         <button onclick="salvarConfigEnvio()" class="bg-viscoblue text-white px-4 py-2 rounded text-sm font-bold uppercase hover:bg-blue-900">Salvar contatos</button>
         <p id="config-envio-status" class="text-xs text-gray-500"></p>
+
+        <div class="pt-4 border-t">
+          <p class="text-xs font-bold text-gray-700 uppercase mb-2">🔗 Link dinâmico do relatório</p>
+          <p class="text-xs text-gray-500 mb-3">
+            Este link sempre mostra os dados atuais (nunca fica desatualizado) e é protegido por senha —
+            qualquer um com o link precisa da senha pra entrar. Dá pra baixar o PDF direto por lá também.
+          </p>
+          <div class="flex flex-wrap gap-2 items-center mb-3">
+            <input id="link-relatorio-campo" type="text" readonly
+                   class="flex-1 min-w-[220px] border rounded p-2 text-xs bg-gray-50 text-gray-600">
+            <button onclick="copiarLinkRelatorio()" class="bg-gray-600 hover:bg-gray-700 text-white text-xs font-bold px-3 py-2 rounded uppercase">Copiar link</button>
+          </div>
+          <p id="relatorio-senha-status" class="text-xs text-gray-500 mb-2"></p>
+          <div class="flex flex-wrap gap-2 items-center">
+            <input id="relatorio-senha-nova" type="password" placeholder="Nova senha do relatório (mín. 4 caracteres)"
+                   class="flex-1 min-w-[220px] border rounded p-2 text-sm">
+            <button onclick="salvarSenhaRelatorio()" class="bg-viscorange hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded uppercase">Salvar senha</button>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <!-- ===== Arquivamento de ciclos ===== -->
+    <details class="bg-white border border-gray-200 rounded-lg mb-6" open>
+      <summary class="cursor-pointer font-bold text-sm text-viscoblue p-4 uppercase">📦 Arquivamento de ciclos e histórico</summary>
+      <div class="p-4 border-t space-y-4">
+        <p class="text-xs text-gray-500">
+          "Arquivar" guarda uma cópia completa (participantes + GRO + PDF sob demanda) do ciclo atual e limpa o painel,
+          para começar uma nova coleta do zero sem misturar com dados antigos. Nada é perdido — o histórico abaixo
+          fica disponível pra consulta e download a qualquer momento.
+        </p>
+        <button onclick="arquivarCiclo()" class="bg-viscorange hover:bg-orange-700 text-white px-4 py-2 rounded text-sm font-bold uppercase shadow">
+          📦 Arquivar dados atuais e zerar painel
+        </button>
+        <div class="pt-3 border-t">
+          <p class="text-xs font-bold text-gray-700 uppercase mb-2">Histórico de ciclos arquivados</p>
+          <div id="lista-arquivos" class="space-y-2"><p class="text-xs text-gray-400">Carregando…</p></div>
+        </div>
       </div>
     </details>
 
@@ -289,14 +336,14 @@ const SETORES_DEMO = ["MANUTENÇÃO MANDRINOS","BOBINADEIRAS MAQUINAS 4 E 5","AD
 // pontua:true nas perguntas "todasCertas" = sempre conta como acerto (incentivo, ninguém zera)
 const QUIZ = [
   { q:"Qual destas ações é fundamental e correta para garantir a segurança de todos na Viscofan?",
-    ico:"🛡️", tema:"Cultura de Segurança", opts:["Relatar imediatamente condições inseguras ao supervisor da área","Usar os EPIs de forma correta e contínua","Realizar a Análise de Risco (Pare, Pense, Aja) antes de iniciar qualquer trabalho","Respeitar rigorosamente as regras de bloqueio e etiquetagem de energias (LOTO)"],
-    ans:[0,1,2,3], pontua:true, todasCertas:true },
+    ico:"🛡️", tema:"Cultura de Segurança", opts:["Ignorar pequenas condições inseguras que não ofereçam risco imediato","Usar os EPIs apenas em atividades de maior risco","Realizar a Análise de Risco (Pare, Pense, Aja) antes de iniciar qualquer trabalho","Aguardar a orientação de outro colaborador antes de iniciar qualquer atividade"],
+    ans:2, pontua:true },
   { q:"A pressa para bater a meta de produção justifica não usar os EPIs?",
     ico:"⏱️", tema:"Uso de EPI", opts:["Sim, desde que a tarefa demore menos de 5 minutos","Não, a segurança e a vida estão sempre em primeiro lugar","Sim, se o supervisor autorizar verbalmente","Apenas no período noturno"], ans:1, pontua:true },
   { q:"Qual a principal finalidade da Análise de Risco antes da tarefa?",
     ico:"🔍", tema:"Análise de Risco", opts:["Garantir que a tarefa seja feita o mais rápido possível","Identificar perigos e definir medidas de controle","Preencher um papel obrigatório para a auditoria","Punição de funcionários que cometem erros"], ans:1, pontua:true },
   { q:"Como prevenir vazamentos de produtos químicos na fábrica?",
-    ico:"🧪", tema:"Produtos Químicos", opts:["Guardar os produtos em recipientes apropriados e identificados","Manter embalagens sempre fechadas quando não estiverem em uso","Separar produtos incompatíveis (ácidos, bases, inflamáveis)","Utilizar bacias de contenção ou pallets de retenção"], ans:[0,1,2,3], pontua:true, todasCertas:true },
+    ico:"🧪", tema:"Produtos Químicos", opts:["Guardar produtos em recipientes apropriados e identificados","Deixar os recipientes abertos para facilitar o acesso durante o turno","Armazenar diferentes produtos químicos juntos para otimizar espaço","Transferir produtos para qualquer recipiente disponível, mesmo sem identificação"], ans:0, pontua:true },
   { q:"A economia de água é responsabilidade de quem na Viscofan?",
     ico:"💧", tema:"Uso Consciente da Água", opts:["Exclusivamente da equipe de utilidades","Apenas dos funcionários da limpeza","De todos os trabalhadores em suas respectivas áreas","Da prefeitura local"], ans:2, pontua:true },
   { q:"Além da fábrica, onde mais a regra da água deve ser aplicada?",
@@ -530,6 +577,7 @@ function startQuiz(){
   if(!aceite)                 return alert("Marque a autorização para continuar.");
 
   S = { fase:"quiz", idx:0, acertos:0, participante:{empresaId:PARTICIPANTE_EMPRESA_ID,nome,cpf,setor}, respQuiz:[], respPesquisa:[] };
+  bloqueado = false; // garante que a trava não fique presa de uma sessão anterior (uso em modo quiosque)
   showScreen("screen-quiz");
   render();
 }
@@ -543,7 +591,7 @@ function startSurvey(){
 function render(){
   const lista = S.fase === "quiz" ? QUIZ : PESQUISA;
   const item  = lista[S.idx];
-  const opts  = S.fase === "quiz" ? item.opts : (item.escala ? ["1","2","3","4","5","6","7","8","9","10"] : ["Sim","Não"]);
+  const opts  = S.fase === "quiz" ? item.opts : (item.escala ? ["1","2","3","4","5","6","7","8","9","10"] : ["Sim","Eventualmente","Não"]);
 
   document.getElementById("phase-label").innerText = S.fase === "quiz" ? "Avaliação técnica" : "GRO — Riscos Ocupacionais";
   document.getElementById("progress-text").innerText = `${S.idx+1} de ${lista.length}`;
@@ -572,6 +620,7 @@ let bloqueado = false; // evita clique duplo durante o feedback
 
 function answer(i, texto, item){
   if(bloqueado) return;
+  bloqueado = true; // trava já na entrada — evita clique/toque duplo criar respostas repetidas
 
   if(S.fase === "quiz"){
     const acertou = Array.isArray(item.ans) ? item.ans.includes(i) : i === item.ans;
@@ -582,7 +631,6 @@ function answer(i, texto, item){
     });
 
     // --- Feedback visual ---
-    bloqueado = true;
     const cont = document.getElementById("options-container");
     const botoes = cont.querySelectorAll("button");
 
@@ -624,7 +672,7 @@ function answer(i, texto, item){
   // Pesquisa GRO: sem feedback, avança direto
   S.respPesquisa.push({ pergunta:item.q, resposta:texto, fav:item.fav || null, escala:!!item.escala });
   S.idx++;
-  if(S.idx < PESQUISA.length) return render();
+  if(S.idx < PESQUISA.length){ bloqueado = false; return render(); }
   savePesquisa();
 }
 
@@ -686,7 +734,7 @@ async function savePesquisa(){
     await api("/pesquisa-gro", { method:"POST", body:{
       empresa_id: S.participante.empresaId,
       setor: S.participante.setor,
-      respostas: S.respPesquisa.map(r => ({ pergunta:r.pergunta, resposta:r.resposta })),
+      respostas: S.respPesquisa.map(r => ({ pergunta:r.pergunta, resposta:r.resposta, fav:r.fav || null })),
       nota_clima: nota
     }});
   } catch(e){
@@ -713,6 +761,7 @@ function showResult(){
 }
 
 function restartApp(){
+  bloqueado = false; // defensivo: garante que a trava não fique presa entre sessões
   ["reg-name","reg-cpf"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("reg-sector").value = "";
   document.getElementById("reg-consent").checked = false;
@@ -783,6 +832,7 @@ async function carregarEmpresasAdmin(){
   await carregarSetoresAdmin();
   await carregarEmpresaAtivaAdmin();
   loadDashboard();
+  carregarArquivos();
 }
 
 // Mostra qual empresa está ativa no formulário público (não confundir
@@ -817,6 +867,7 @@ async function onTrocaEmpresaAdmin(){
   ADMIN_EMPRESA_ID = document.getElementById("admin-empresa-select").value;
   await carregarSetoresAdmin();
   loadDashboard();
+  carregarArquivos();
   if(CRUD_ATUAL && !document.getElementById("screen-db-crud").classList.contains("hidden")){
     carregarTabelaCrud();
   }
@@ -872,9 +923,11 @@ function gerarDemo(){
     if(p.setor === secs[2] && i > 5) return;
     pesquisa.push({
       id:"demop-"+i, setor:p.setor, nota_clima: 4 + rnd(6),
-      respostas: PESQUISA.filter(q => !q.escala).map(q => ({
-        pergunta:q.q, resposta: Math.random() > 0.35 ? q.fav : (q.fav === "Sim" ? "Não" : "Sim")
-      })),
+      respostas: PESQUISA.filter(q => !q.escala).map(q => {
+        const r = Math.random();
+        const resposta = r > 0.35 ? q.fav : r > 0.15 ? "Eventualmente" : (q.fav === "Sim" ? "Não" : "Sim");
+        return { pergunta:q.q, resposta };
+      }),
       criado_em: new Date().toISOString().slice(0,10)
     });
   });
@@ -1133,7 +1186,7 @@ function renderSetores(dash, participantes, pesquisas){
           <p class="text-xs text-gray-500 mb-3">Percentual de acerto em cada pergunta pontuável. Vermelho = abaixo de 50%.</p>
           ${blocoQuiz}
 
-          <p class="font-bold text-gray-700 text-xs uppercase mt-5 mb-1 border-t pt-3">🧠 GRO — Respostas por pergunta (Sim/Não)</p>
+          <p class="font-bold text-gray-700 text-xs uppercase mt-5 mb-1 border-t pt-3">🧠 GRO — Respostas por pergunta (Sim/Eventualmente/Não)</p>
           <p class="text-xs text-gray-500 mb-3">Distribuição real das respostas. A classificação (Ruim/Regular/Bom/Excelente) indica a qualidade com base no % de respostas favoráveis. Dados anônimos e agregados.</p>
           ${blocoGro}
 
@@ -1196,16 +1249,20 @@ function calcularStatsGro(pesq){
   pesq.forEach(r => r.respostas.forEach(a => {
     const meta = PESQUISA.find(x => x.q === a.pergunta);
     if(!meta || !meta.fav) return;
-    stats[a.pergunta] = stats[a.pergunta] || { total:0, sim:0, nao:0, tema:meta.tema, fav:meta.fav };
+    stats[a.pergunta] = stats[a.pergunta] || { total:0, sim:0, nao:0, eventualmente:0, tema:meta.tema, fav:meta.fav };
     stats[a.pergunta].total++;
-    if(a.resposta === "Sim") stats[a.pergunta].sim++; else if(a.resposta === "Não") stats[a.pergunta].nao++;
+    if(a.resposta === "Sim") stats[a.pergunta].sim++;
+    else if(a.resposta === "Não") stats[a.pergunta].nao++;
+    else if(a.resposta === "Eventualmente") stats[a.pergunta].eventualmente++;
   }));
   return Object.entries(stats).map(([q,s]) => {
-    const favoravel = s.fav === "Sim" ? s.sim : s.nao; // quem respondeu no sentido saudável
+    // "Eventualmente" conta como meio ponto favorável — nem ignora, nem trata como Sim/Não pleno.
+    const favoravel = (s.fav === "Sim" ? s.sim : s.nao) + s.eventualmente * 0.5;
     const pctFavoravel = Math.round(favoravel/s.total*100);
     return {
       q, tema:s.tema, total:s.total,
       simPct: Math.round(s.sim/s.total*100), simCount:s.sim,
+      eventualmentePct: Math.round(s.eventualmente/s.total*100), eventualmenteCount:s.eventualmente,
       naoPct: Math.round(s.nao/s.total*100), naoCount:s.nao,
       pctFavoravel,
       classif: classificarGroPergunta(pctFavoravel)
@@ -1239,6 +1296,7 @@ function renderLinhasGro(linhas){
                 <div>${esc(l.q)}</div>
                 <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] mt-1">
                   <span class="text-green-700 font-bold">Sim: ${l.simPct}% (${l.simCount})</span>
+                  <span class="text-yellow-700 font-bold">Eventualmente: ${l.eventualmentePct}% (${l.eventualmenteCount})</span>
                   <span class="text-red-700 font-bold">Não: ${l.naoPct}% (${l.naoCount})</span>
                   <span class="font-black ml-auto">${l.classif.ico} ${l.classif.label} (nota ${l.classif.nota})</span>
                 </div>
@@ -1283,7 +1341,7 @@ function gerarAnaliseGro(statsGro, groValido){
   const itens = criticos.map(l => {
     const sugestao = SUGESTOES_GRO[l.tema] || "Investigar esse ponto com a liderança da área.";
     const ico = ICONES_GRO_TEMA[l.tema] || "🔸";
-    return `<li class="mb-2">${ico} <span class="font-bold">${l.classif.ico} ${l.classif.label}</span> em "${esc(l.tema || l.q)}" (Sim: ${l.simPct}% · Não: ${l.naoPct}%). <span class="text-gray-600">${esc(sugestao)}</span></li>`;
+    return `<li class="mb-2">${ico} <span class="font-bold">${l.classif.ico} ${l.classif.label}</span> em "${esc(l.tema || l.q)}" (Sim: ${l.simPct}% · Eventualmente: ${l.eventualmentePct}% · Não: ${l.naoPct}%). <span class="text-gray-600">${esc(sugestao)}</span></li>`;
   }).join("");
   return `<div class="bg-indigo-50 border-l-4 border-indigo-500 rounded p-4 mb-5">
     <p class="font-bold text-gray-800 text-sm mb-2 flex items-center gap-1">🧠 GRO — pontos de atenção</p>
@@ -1420,8 +1478,9 @@ function dispararConfete(){
 // Monta o PDF inteiro e retorna o objeto doc, SEM salvar/baixar.
 // Usado tanto pelo botão de exportar quanto pelos botões de enviar
 // (e-mail/WhatsApp), que precisam do arquivo antes de compartilhar.
-async function construirPDF(){
-  const { participantes, pesquisa } = CACHE;
+async function construirPDF(participantesArg, pesquisaArg){
+  const participantes = participantesArg || CACHE.participantes;
+  const pesquisa = pesquisaArg || CACHE.pesquisa;
   if(!participantes.length){ alert("Nada para exportar."); return null; }
 
   if(!window.jspdf || !window.jspdf.jsPDF){
@@ -1486,6 +1545,73 @@ async function construirPDF(){
   doc.text(MIN_RESPONDENTES + " respostas têm o GRO omitido nesse relatório para preservar o anonimato.", 17, y+13);
 
   y += 24;
+
+  // === RESUMO DE PARTICIPAÇÃO POR SETOR (destaque logo no início) ===
+  {
+    const contagem = {};
+    participantes.forEach(p => { contagem[p.setor] = (contagem[p.setor] || 0) + 1; });
+    const setoresResumo = Object.keys(contagem).sort();
+    const altura = 10 + setoresResumo.length * 5.5 + 4;
+    checkPage(altura + 8);
+    doc.setFillColor(...AZUL); doc.rect(14, y, W-28, 9, "F");
+    doc.setTextColor(255,255,255); doc.setFontSize(9.5); doc.setFont("helvetica","bold");
+    doc.text("PARTICIPANTES POR SETOR", 17, y+6.2);
+    doc.setTextColor(0,0,0); doc.setFont("helvetica","normal");
+    y += 9;
+
+    doc.autoTable({
+      startY: y,
+      margin: {left:14, right:14},
+      head: [["Setor","Participantes"]],
+      body: setoresResumo.map(sec => [sec, String(contagem[sec])]),
+      foot: [["TOTAL", String(participantes.length)]],
+      headStyles: { fillColor:AZUL, fontSize:8, cellPadding:2 },
+      bodyStyles: { fontSize:8, cellPadding:2 },
+      footStyles: { fillColor:[230,230,230], textColor:[0,0,0], fontStyle:"bold", fontSize:8, cellPadding:2 },
+      columnStyles: { 0:{cellWidth:"auto"}, 1:{cellWidth:35, halign:"center"} },
+      alternateRowStyles: { fillColor:[245,245,245] },
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // === LISTA DE CONFIRMAÇÃO DE PARTICIPAÇÃO (nome + CPF mascarado, por setor) ===
+  {
+    const porSetor = {};
+    participantes.forEach(p => { (porSetor[p.setor] = porSetor[p.setor] || []).push(p); });
+    const setoresLista = Object.keys(porSetor).sort();
+
+    checkPage(14);
+    doc.setFontSize(9.5); doc.setFont("helvetica","bold"); doc.setTextColor(...AZUL);
+    doc.text("Lista de confirmação de participação", 14, y);
+    doc.setFont("helvetica","normal"); doc.setTextColor(0,0,0);
+    y += 6;
+
+    setoresLista.forEach(sec => {
+      const lista = porSetor[sec].slice().sort((a,b) => a.nome.localeCompare(b.nome, "pt-BR"));
+      checkPage(10 + Math.min(lista.length, 3) * 5);
+
+      doc.setFillColor(235,240,245); doc.rect(14, y, W-28, 6.5, "F");
+      doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(...AZUL);
+      doc.text(sec.toUpperCase() + `  (${lista.length})`, 17, y+4.5);
+      doc.setFont("helvetica","normal"); doc.setTextColor(0,0,0);
+      y += 7;
+
+      doc.autoTable({
+        startY: y,
+        margin: {left:14, right:14},
+        head: [["Nome","CPF"]],
+        body: lista.map(p => [p.nome, mascararCpf(p.cpf)]),
+        headStyles: { fillColor:[200,210,220], textColor:[0,0,0], fontSize:7.5, cellPadding:1.5 },
+        bodyStyles: { fontSize:7.5, cellPadding:1.5 },
+        columnStyles: { 0:{cellWidth:"auto"}, 1:{cellWidth:38, halign:"center"} },
+        alternateRowStyles: { fillColor:[248,248,248] },
+      });
+      y = doc.lastAutoTable.finalY + 5;
+    });
+
+    y += 3;
+  }
+
   rodape();
 
   // === AGRUPAR POR SETOR ===
@@ -1568,7 +1694,7 @@ async function construirPDF(){
         const criticos = statsGro.filter(l => l.classif.nota <= 6).slice(0, 3);
         if(criticos.length){
           const linhas = criticos.flatMap(l => doc.splitTextToSize(
-            `• ${l.classif.label.toUpperCase()} (nota ${l.classif.nota}) em "${l.tema || l.q}" (Sim: ${l.simPct}% · Não: ${l.naoPct}%). ${SUGESTOES_GRO[l.tema] || "Investigar esse ponto com a liderança da área."}`,
+            `• ${l.classif.label.toUpperCase()} (nota ${l.classif.nota}) em "${l.tema || l.q}" (Sim: ${l.simPct}% · Eventualmente: ${l.eventualmentePct}% · Não: ${l.naoPct}%). ${SUGESTOES_GRO[l.tema] || "Investigar esse ponto com a liderança da área."}`,
             W - 40));
           const altura = 8 + 5 + linhas.length * 3.8 + 6;
           checkPage(altura + 8);
@@ -1639,17 +1765,18 @@ async function construirPDF(){
       doc.autoTable({
         startY: y,
         margin: {left:14, right:14},
-        head: [["Pergunta","Sim","Não","Nota","Classificação"]],
-        body: statsGro.map(l => [l.q, `${l.simPct}% (${l.simCount})`, `${l.naoPct}% (${l.naoCount})`, String(l.classif.nota), l.classif.label]),
+        head: [["Pergunta","Sim","Eventualmente","Não","Nota","Classificação"]],
+        body: statsGro.map(l => [l.q, `${l.simPct}% (${l.simCount})`, `${l.eventualmentePct}% (${l.eventualmenteCount})`, `${l.naoPct}% (${l.naoCount})`, String(l.classif.nota), l.classif.label]),
         headStyles: { fillColor:AZUL, fontSize:7, cellPadding:2 },
         bodyStyles: { fontSize:7, cellPadding:2 },
-        columnStyles: { 0:{cellWidth:"auto"}, 1:{cellWidth:20, halign:"center"}, 2:{cellWidth:20, halign:"center"}, 3:{cellWidth:12, halign:"center"}, 4:{cellWidth:22, halign:"center"} },
+        columnStyles: { 0:{cellWidth:"auto"}, 1:{cellWidth:18, halign:"center"}, 2:{cellWidth:24, halign:"center"}, 3:{cellWidth:18, halign:"center"}, 4:{cellWidth:12, halign:"center"}, 5:{cellWidth:22, halign:"center"} },
         alternateRowStyles: { fillColor:[245,245,245] },
         didParseCell: function(data){
           if(data.section==="body" && data.column.index===1) data.cell.styles.textColor = [0,120,0];
-          if(data.section==="body" && data.column.index===2) data.cell.styles.textColor = [180,0,0];
-          if(data.section==="body" && (data.column.index===3 || data.column.index===4)){
-            const nota = parseInt(data.row.raw[3]);
+          if(data.section==="body" && data.column.index===2) data.cell.styles.textColor = [190,150,0];
+          if(data.section==="body" && data.column.index===3) data.cell.styles.textColor = [180,0,0];
+          if(data.section==="body" && (data.column.index===4 || data.column.index===5)){
+            const nota = parseInt(data.row.raw[4]);
             if(nota <= 4) data.cell.styles.textColor = [190,30,30];
             else if(nota <= 6) data.cell.styles.textColor = [190,150,0];
             else if(nota <= 8) data.cell.styles.textColor = [70,150,40];
@@ -1785,8 +1912,16 @@ async function construirPDF(){
 
 // Botão "Exportar relatório (PDF)": gera e baixa o arquivo localmente.
 async function exportReport(){
-  const doc = await construirPDF();
-  if(doc) doc.save("Relatorio_Viscofan.pdf");
+  const btn = document.querySelector('button[onclick="exportReport()"]');
+  const textoOriginal = btn ? btn.textContent : null;
+  if(btn){ btn.disabled = true; btn.textContent = "Atualizando dados…"; }
+  try {
+    if(!MODO_TESTE) await loadDashboard(); // busca os dados mais recentes do banco antes de montar o PDF
+    const doc = await construirPDF();
+    if(doc) doc.save("Relatorio_Viscofan.pdf");
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = textoOriginal; }
+  }
 }
 
 // Preenche os campos de contato na tela com o que já está salvo.
@@ -1800,6 +1935,44 @@ function preencherCamposConfig(cfg){
     const el = document.getElementById("cfg-whats" + k.slice(-1));
     if(el) el.value = cfg[k] || "";
   });
+
+  const campoLink = document.getElementById("link-relatorio-campo");
+  const statusSenha = document.getElementById("relatorio-senha-status");
+  if(campoLink && ADMIN_EMPRESA_ID && !MODO_TESTE){
+    campoLink.value = window.location.origin + "/relatorio/" + ADMIN_EMPRESA_ID;
+  }
+  if(statusSenha){
+    statusSenha.textContent = cfg.relatorio_tem_senha
+      ? "Senha já configurada. Salvar uma nova substitui a atual."
+      : "Nenhuma senha configurada ainda — o link não funciona até você definir uma.";
+    statusSenha.className = cfg.relatorio_tem_senha ? "text-xs text-green-700 font-bold mb-2" : "text-xs text-orange-600 font-bold mb-2";
+  }
+}
+
+function copiarLinkRelatorio(){
+  const campo = document.getElementById("link-relatorio-campo");
+  if(!campo.value) return alert("Selecione uma empresa primeiro.");
+  navigator.clipboard.writeText(campo.value)
+    .then(() => alert("Link copiado!"))
+    .catch(() => { campo.select(); alert("Não deu pra copiar automaticamente — o link já está selecionado, use Ctrl+C."); });
+}
+
+async function salvarSenhaRelatorio(){
+  const input = document.getElementById("relatorio-senha-nova");
+  const senha = input.value;
+  if(MODO_TESTE) return alert("Modo demonstração: não aplicável.");
+  if(!ADMIN_EMPRESA_ID) return alert("Selecione uma empresa primeiro.");
+  if(senha.length < 4) return alert("Senha muito curta (mínimo 4 caracteres).");
+  try {
+    await api("/config-envio/senha-relatorio", { method:"PUT", auth:true, body:{ empresa_id: ADMIN_EMPRESA_ID, senha } });
+    input.value = "";
+    alert("Senha do relatório salva com sucesso.");
+    const cfg = await api("/config-envio?empresa_id=" + encodeURIComponent(ADMIN_EMPRESA_ID), { auth:true });
+    CACHE.configEnvio = cfg || {};
+    preencherCamposConfig(CACHE.configEnvio);
+  } catch(e){
+    alert("Erro ao salvar senha: " + e.message);
+  }
 }
 
 // Salva os até 3 e-mails e até 3 WhatsApp cadastrados.
@@ -1848,6 +2021,8 @@ function construirLinkWhatsapp(numero, texto){
 // pra virar um link — por isso sobe pro backend (pasta uploads/) antes de montar
 // a mensagem. Não existe anexo automático real: quem recebe abre o link.
 async function enviarRelatorio(canal){
+  if(!MODO_TESTE) await loadDashboard(); // busca os dados mais recentes do banco antes de montar o PDF
+
   const cfg = CACHE.configEnvio || {};
   const emails = [cfg.email1, cfg.email2, cfg.email3].filter(Boolean);
   const whats  = [cfg.whatsapp1, cfg.whatsapp2, cfg.whatsapp3].filter(Boolean);
@@ -1899,6 +2074,131 @@ async function enviarRelatorio(canal){
       alert(`Abrindo ${whats.length} conversas do WhatsApp, uma por número cadastrado. Se o navegador bloquear alguma aba, permita pop-ups para este site e clique de novo.`);
     }
   }
+}
+
+// Filtra por dia (formato yyyy-mm-dd) um array de registros que tenham
+// campo criado_em (timestamp com hora ou date puro — ambos comparam
+// certo com slice(0,10), já que timestamptz do Postgres vem em ISO).
+function filtrarPorDia(lista, diaISO){
+  return lista.filter(r => String(r.criado_em).slice(0,10) === diaISO);
+}
+
+// Gera e baixa o PDF do ciclo ATUAL (ainda não arquivado) filtrado só
+// pelo dia escolhido no campo de data. Sem data escolhida, avisa e para.
+async function exportReportDoDia(){
+  const dia = document.getElementById("filtro-dia-pdf").value;
+  if(!dia) return alert("Escolha uma data primeiro.");
+
+  if(!MODO_TESTE) await loadDashboard();
+
+  const participantesDia = filtrarPorDia(CACHE.participantes, dia);
+  const pesquisaDia = filtrarPorDia(CACHE.pesquisa, dia);
+  if(!participantesDia.length && !pesquisaDia.length){
+    return alert("Nenhum dado encontrado para essa data no ciclo atual.");
+  }
+
+  const doc = await construirPDF(participantesDia, pesquisaDia);
+  if(doc) doc.save(`Relatorio_Viscofan_${dia}.pdf`);
+}
+
+// Lista os ciclos já arquivados da empresa selecionada, com botões pra
+// baixar o PDF completo do ciclo ou de um dia específico dentro dele.
+async function carregarArquivos(){
+  const cont = document.getElementById("lista-arquivos");
+  if(!cont) return;
+
+  if(MODO_TESTE || !ADMIN_EMPRESA_ID){
+    cont.innerHTML = '<p class="text-xs text-gray-400">Nenhum ciclo arquivado ainda.</p>';
+    return;
+  }
+
+  let arquivos;
+  try {
+    arquivos = await api("/arquivos?empresa_id=" + encodeURIComponent(ADMIN_EMPRESA_ID), { auth:true });
+  } catch(e){
+    cont.innerHTML = `<p class="text-xs text-red-600">Erro ao carregar histórico: ${esc(e.message)}</p>`;
+    return;
+  }
+
+  if(!arquivos.length){
+    cont.innerHTML = '<p class="text-xs text-gray-400">Nenhum ciclo arquivado ainda.</p>';
+    return;
+  }
+
+  cont.innerHTML = arquivos.map(a => {
+    const periodo = a.data_inicio === a.data_fim ? esc(a.data_inicio || "—") : `${esc(a.data_inicio||"—")} a ${esc(a.data_fim||"—")}`;
+    return `<div class="border rounded-lg p-3 flex flex-wrap items-center gap-3 justify-between">
+      <div>
+        <p class="font-bold text-sm text-gray-800">${esc(a.nome)}</p>
+        <p class="text-xs text-gray-500">Período: ${periodo} · ${a.total_participantes} avaliações · ${a.total_gro} respostas GRO · arquivado em ${new Date(a.criado_em).toLocaleString("pt-BR")}</p>
+      </div>
+      <div class="flex flex-wrap gap-2 items-center">
+        <input type="date" id="dia-arquivo-${a.id}" class="border rounded p-1.5 text-xs">
+        <button onclick="baixarPDFArquivo('${a.id}', true)" class="bg-gray-600 hover:bg-gray-700 text-white text-xs font-bold px-3 py-1.5 rounded uppercase">Baixar dia</button>
+        <button onclick="baixarPDFArquivo('${a.id}', false)" class="bg-viscoblue hover:bg-blue-900 text-white text-xs font-bold px-3 py-1.5 rounded uppercase">Baixar PDF completo</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// Baixa o PDF de um arquivo já arquivado. Regenera na hora a partir do
+// snapshot salvo no banco (não depende de nenhum arquivo estático).
+async function baixarPDFArquivo(arquivoId, apenasDia){
+  let dia = null;
+  if(apenasDia){
+    dia = document.getElementById("dia-arquivo-" + arquivoId).value;
+    if(!dia) return alert("Escolha uma data no campo ao lado do ciclo primeiro.");
+  }
+
+  let arquivo;
+  try {
+    arquivo = await api("/arquivos/" + arquivoId, { auth:true });
+  } catch(e){
+    return alert("Não foi possível carregar esse arquivo: " + e.message);
+  }
+
+  const participantes = dia ? filtrarPorDia(arquivo.participantes, dia) : arquivo.participantes;
+  const pesquisa = dia ? filtrarPorDia(arquivo.pesquisa_gro, dia) : arquivo.pesquisa_gro;
+  if(!participantes.length && !pesquisa.length){
+    return alert("Nenhum dado encontrado para essa data dentro desse ciclo.");
+  }
+
+  const doc = await construirPDF(participantes, pesquisa);
+  if(doc) doc.save(`Relatorio_Viscofan_${esc(arquivo.nome).replace(/\s+/g,"_")}${dia ? "_"+dia : ""}.pdf`);
+}
+
+// Fecha o ciclo atual: guarda uma cópia completa (dados + possibilidade
+// de gerar o PDF depois) e zera o painel pra começar do zero, evitando
+// misturar respostas de campanhas diferentes.
+async function arquivarCiclo(){
+  if(MODO_TESTE) return alert("Modo demonstração: não há dados reais para arquivar.");
+  if(!ADMIN_EMPRESA_ID) return alert("Selecione uma empresa primeiro.");
+
+  await loadDashboard();
+  if(!CACHE.participantes.length && !CACHE.pesquisa.length){
+    return alert("Não há dados no ciclo atual para arquivar.");
+  }
+
+  const nomeEmpresa = (ADMIN_EMPRESAS_CACHE.find(e => e.id === ADMIN_EMPRESA_ID) || {}).nome || "";
+  const sugestao = `Ciclo até ${new Date().toLocaleDateString("pt-BR")}`;
+  const nome = prompt(
+    `Arquivar dados atuais de "${nomeEmpresa}"?\n\n` +
+    `Isso guarda uma cópia completa (${CACHE.participantes.length} avaliações, ${CACHE.pesquisa.length} respostas GRO) ` +
+    `e LIMPA o painel para começar um novo ciclo. O histórico continua acessível pra download depois.\n\n` +
+    `Dê um nome para este ciclo (ou cancele para não arquivar):`,
+    sugestao
+  );
+  if(!nome) return;
+
+  try {
+    await api("/arquivos", { method:"POST", auth:true, body:{ empresa_id: ADMIN_EMPRESA_ID, nome } });
+  } catch(e){
+    return alert("Não foi possível arquivar: " + e.message);
+  }
+
+  alert("Ciclo arquivado com sucesso. O painel foi zerado para a nova coleta.");
+  await loadDashboard();
+  await carregarArquivos();
 }
 
 async function clearAll(){
