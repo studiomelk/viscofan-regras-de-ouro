@@ -172,3 +172,31 @@ update config_envio set empresa_id = (select id from empresas where nome = 'Visc
 alter table config_envio alter column empresa_id set not null;
 alter table config_envio drop column if exists id;
 alter table config_envio add constraint config_envio_pkey primary key (empresa_id);
+
+-- =====================================================================
+-- ARQUIVAMENTO DE CICLOS (2026-08-05) — "fechar" a coleta atual, guardar
+-- uma cópia completa (participantes + GRO) e limpar o painel para
+-- começar um novo ciclo sem misturar dados. Tabela nova e independente:
+-- não altera participantes/pesquisa_gro, então é seguro rodar de novo.
+-- =====================================================================
+create table if not exists arquivos (
+  id                  uuid primary key default gen_random_uuid(),
+  empresa_id          uuid not null references empresas(id),
+  nome                text not null,
+  data_inicio         date,
+  data_fim            date,
+  total_participantes int not null default 0,
+  total_gro           int not null default 0,
+  participantes       jsonb not null default '[]',
+  pesquisa_gro        jsonb not null default '[]',
+  criado_em           timestamptz not null default now()
+);
+create index if not exists idx_arquivos_empresa on arquivos (empresa_id);
+
+-- =====================================================================
+-- LINK PÚBLICO DE RELATÓRIO (2026-08-05) — página que qualquer pessoa
+-- com o link pode abrir (sem login de admin) e que sempre mostra os
+-- dados atuais, protegida por uma senha por empresa (hash, nunca texto
+-- puro). O link em si já usa o empresa_id (uuid, imprevisível).
+-- =====================================================================
+alter table config_envio add column if not exists relatorio_senha_hash text;
